@@ -122,8 +122,24 @@ if go:
             st.info("📤 Updating Google Sheets...")
             try:
                 sheet = connect_to_sheets()
-                sheet.append_row([cert, model, serial, cal, exp, drive_url, qr_link])
-                st.success("✅ Uploaded to Google Sheets!")
+                # Check if serial exists
+            records = sheet.get_all_values()
+            serial_col_index = 2  # "Serial" is 3rd column (index 2 because it's 0-based)
+            
+            row_index = None
+            for i, row in enumerate(records):
+                if len(row) > serial_col_index and row[serial_col_index] == serial:
+                    row_index = i + 1  # +1 because Sheets is 1-based
+                    break
+            
+            row_data = [cert, model, serial, cal, exp, drive_url, qr_link]
+            
+            if row_index:
+                sheet.update(f"A{row_index}:G{row_index}", [row_data])
+                st.success("✅ Existing entry updated in Google Sheets!")
+            else:
+                sheet.append_row(row_data)
+                st.success("✅ New entry added to Google Sheets!")
             except Exception as e:
                 import traceback
                 error_details = traceback.format_exc()
