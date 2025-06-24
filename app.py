@@ -79,7 +79,8 @@ def generate_qr(serial):
 
 def connect_to_sheets():
     creds_dict = st.secrets["google_service_account"]
-    creds = service_account.Credentials.from_service_account_info(creds_dict)
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=scopes)
     client = gspread.authorize(creds)
     return client.open("Calibration Certificates").worksheet("certs")
 
