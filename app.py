@@ -45,7 +45,7 @@ def extract_data_from_pdf(pdf_path):
 
     date_lines = [
         l for l in lines
-        if re.match(r"^(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}$", l)
+        if re.match(r"^(January|February|March|April|May|June|July|August|September|October|November|December)\\s+\\d{1,2},\\s+\\d{4}$", l)
     ]
     cal_date = format_date(date_lines[0]) if len(date_lines) > 0 else "Invalid"
     exp_date = format_date(date_lines[1]) if len(date_lines) > 1 else "Invalid"
@@ -141,10 +141,10 @@ if uploaded_file:
                 row_index = i + 1
                 break
 
-        row_data = [cert, model, serial, cal, exp, drive_url, f"=HYPERLINK(\"{qr_link}\", \"Web\") & CHAR(10) & HYPERLINK(\"{qr_drive_url}\", \"Image\")"]
+        row_data = [cert, model, serial, cal, exp, drive_url, qr_drive_url, qr_link]
 
         if row_index:
-            sheet.update(f"A{row_index}:G{row_index}", [row_data])
+            sheet.update(f"A{row_index}:H{row_index}", [row_data])
             st.success("✅ Existing entry updated in Google Sheets!")
         else:
             sheet.append_row(row_data)
