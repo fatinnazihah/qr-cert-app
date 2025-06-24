@@ -5,7 +5,6 @@ import qrcode
 import streamlit as st
 import gspread
 from datetime import datetime
-from io import BytesIO
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -54,9 +53,8 @@ def extract_data_from_pdf(pdf_path):
 
 def generate_qr(serial):
     qr_url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
-    img = qrcode.make(qr_url)
     img_path = os.path.join(QR_DIR, f"qr_{serial}.png")
-    img.save(img_path)
+    qrcode.make(qr_url).save(img_path)
     return qr_url, img_path
 
 def connect_to_sheets():
@@ -78,7 +76,6 @@ def upload_to_drive(filepath, serial):
     folder_id = st.secrets["drive"]["folder_id"]
     filename = f"{serial}.pdf"
 
-    # Search for existing file with same name
     query = f"name = '{filename}' and '{folder_id}' in parents and mimeType = 'application/pdf' and trashed = false"
     results = drive_service.files().list(q=query, spaces='drive', fields='files(id)').execute()
     files = results.get('files', [])
@@ -86,15 +83,14 @@ def upload_to_drive(filepath, serial):
 
     try:
         if files:
-            # Replace existing file
             file_id = files[0]['id']
             drive_service.files().update(fileId=file_id, media_body=media).execute()
-            return f"https://drive.google.com/file/d/{file_id}/view"
         else:
-            # Upload new file
             file_metadata = {"name": filename, "parents": [folder_id]}
             uploaded = drive_service.files().create(body=file_metadata, media_body=media, fields="id").execute()
-            return f"https://drive.google.com/file/d/{uploaded['id']}/view"
+            file_id = uploaded["id"]
+
+        return f"https://drive.google.com/file/d/{file_id}/view"
     except HttpError as err:
         st.error(f"⚠️ Drive upload failed: {err.resp.status} – {err._get_reason()}")
         return None
@@ -133,9 +129,9 @@ if uploaded_file:
     try:
         sheet = connect_to_sheets()
         records = sheet.get_all_values()
-        serial_col_index = 2  # Serial is in the 3rd column
-
+        serial_col_index = 2  # Column C is serial
         row_index = None
+
         for i, row in enumerate(records):
             if len(row) > serial_col_index and row[serial_col_index] == serial:
                 row_index = i + 1
@@ -144,6 +140,7 @@ if uploaded_file:
         row_data = [cert, model, serial, cal, exp, drive_url, qr_link]
 
         if row_index:
+            # Always update full row to refresh drive link + qr
             sheet.update(f"A{row_index}:G{row_index}", [row_data])
             st.success("✅ Existing entry updated in Google Sheets!")
         else:
