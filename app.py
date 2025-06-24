@@ -8,7 +8,6 @@ import gspread
 from io import BytesIO
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs
-from oauth2client.service_account import ServiceAccountCredentials
 
 # === Config ===
 TEMP_PDF = "examplecert.pdf"
