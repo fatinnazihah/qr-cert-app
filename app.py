@@ -79,9 +79,7 @@ def generate_qr(serial):
     return qr_url, img_path
 
 def connect_to_sheets():
-    with open("service_account.json") as f:
-        creds_dict = json.load(f)
-
+    creds_dict = st.secrets["google_service_account"]
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
     creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=scopes)
     client = gspread.authorize(creds)
