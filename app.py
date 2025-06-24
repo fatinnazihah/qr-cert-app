@@ -1,5 +1,5 @@
 import os
-import fitz
+import fitz  # PyMuPDF
 import re
 import qrcode
 import requests
@@ -8,6 +8,7 @@ import gspread
 from io import BytesIO
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs
+from google.oauth2 import service_account
 
 # === Config ===
 TEMP_PDF = "examplecert.pdf"
@@ -60,7 +61,10 @@ def extract_data_from_pdf(pdf_path):
     except:
         model = "Unknown"
 
-    date_lines = [l for l in lines if re.match(r"^(January|February|March|...|December)\s+\d{1,2},\s+\d{4}$", l)]
+    date_lines = [
+        l for l in lines
+        if re.match(r"^(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}$", l)
+    ]
     cal_date = format_date(date_lines[0]) if len(date_lines) > 0 else "Invalid"
     exp_date = format_date(date_lines[1]) if len(date_lines) > 1 else "Invalid"
 
@@ -73,14 +77,11 @@ def generate_qr(serial):
     img.save(img_path)
     return qr_url, img_path
 
-from google.oauth2 import service_account
-
 def connect_to_sheets():
     creds_dict = st.secrets["google_service_account"]
     creds = service_account.Credentials.from_service_account_info(creds_dict)
     client = gspread.authorize(creds)
     return client.open("Calibration Certificates").worksheet("certs")
-
 
 # === Streamlit UI ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
@@ -115,15 +116,15 @@ if go:
             st.write(f"[🔗 QR Link]({qr_link})")
 
             st.info("📤 Updating Google Sheets...")
-            sheet = connect_to_sheets()
             try:
+                sheet = connect_to_sheets()
                 sheet.append_row([cert, model, serial, cal, exp, drive_url, qr_link])
                 st.success("✅ Uploaded to Google Sheets!")
             except Exception as e:
                 import traceback
                 error_details = traceback.format_exc()
                 st.error("❌ Failed to update Google Sheets.")
-                st.text(error_details)  # 👈 this will print the full error trace in your app
+                st.text(error_details)
 
     except Exception as e:
         st.error(f"❌ Error: {e}")
