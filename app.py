@@ -116,8 +116,14 @@ if go:
 
             st.info("📤 Updating Google Sheets...")
             sheet = connect_to_sheets()
-            sheet.append_row([cert, model, serial, cal, exp, drive_url, qr_link])
-            st.success("✅ Uploaded to Google Sheets!")
+            try:
+                sheet.append_row([cert, model, serial, cal, exp, drive_url, qr_link])
+                st.success("✅ Uploaded to Google Sheets!")
+            except Exception as e:
+                import traceback
+                error_details = traceback.format_exc()
+                st.error("❌ Failed to update Google Sheets.")
+                st.text(error_details)  # 👈 this will print the full error trace in your app
 
     except Exception as e:
         st.error(f"❌ Error: {e}")
