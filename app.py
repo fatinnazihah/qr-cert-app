@@ -2,14 +2,14 @@ import os
 import fitz  # PyMuPDF
 import re
 import qrcode
-import requests
 import streamlit as st
 import gspread
 import json
 from io import BytesIO
 from datetime import datetime
-from urllib.parse import urlparse, parse_qs
 from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 
 # === Config ===
 TEMP_PDF = "examplecert.pdf"
@@ -17,25 +17,6 @@ QR_DIR = "qrcodes"
 os.makedirs(QR_DIR, exist_ok=True)
 
 # === Helpers ===
-def extract_drive_file_id(drive_url):
-    parsed = urlparse(drive_url)
-    if '/file/d/' in parsed.path:
-        return parsed.path.split('/')[3]
-    qs = parse_qs(parsed.query)
-    return qs.get('id', [None])[0]
-
-def download_file_from_google_drive(file_id, destination):
-    URL = "https://docs.google.com/uc?export=download"
-    session = requests.Session()
-    response = session.get(URL, params={'id': file_id}, stream=True)
-    token = next((v for k, v in response.cookies.items() if k.startswith("download_warning")), None)
-    if token:
-        response = session.get(URL, params={'id': file_id, 'confirm': token}, stream=True)
-    with open(destination, "wb") as f:
-        for chunk in response.iter_content(32768):
-            if chunk:
-                f.write(chunk)
-
 def format_date(date_str):
     try:
         return datetime.strptime(date_str, "%B %d, %Y").strftime("%Y-%m-%d")
@@ -88,66 +69,77 @@ def connect_to_sheets():
     client = gspread.authorize(creds)
     return client.open("Calibration Certificates").worksheet("certs")
 
+def upload_to_drive(filepath, filename):
+    creds_dict = st.secrets["google_service_account"]
+    scopes = ["https://www.googleapis.com/auth/drive"]
+    creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    drive_service = build("drive", "v3", credentials=creds)
+
+    file_metadata = {
+        "name": filename,
+        "parents": [st.secrets["drive_folder_id"]]
+    }
+    media = MediaFileUpload(filepath, mimetype="application/pdf")
+    uploaded_file = drive_service.files().create(
+        body=file_metadata,
+        media_body=media,
+        fields="id"
+    ).execute()
+    file_id = uploaded_file.get("id")
+    return f"https://drive.google.com/file/d/{file_id}/view"
+
 # === Streamlit UI ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
 st.title("📄 Certificate Extractor + QR Generator")
-st.write("Paste a Google Drive PDF link to extract certificate data & auto-update Sheets.")
+st.write("Upload a PDF certificate to extract data, generate a QR code, upload to Google Drive, and sync with Google Sheets.")
 
-drive_url = st.text_input("🔗 Google Drive File Link")
-go = st.button("🚀 Extract & Upload")
+uploaded_file = st.file_uploader("📄 Upload Certificate PDF", type=["pdf"])
+if uploaded_file:
+    with open(TEMP_PDF, "wb") as f:
+        f.write(uploaded_file.read())
 
-if go:
+    st.info("🔍 Extracting data...")
+    cert, model, serial, cal, exp = extract_data_from_pdf(TEMP_PDF)
+
+    st.success("✅ Data Extracted:")
+    st.write(f"**Certificate No:** {cert}")
+    st.write(f"**Model:** {model}")
+    st.write(f"**Serial:** {serial}")
+    st.write(f"**Calibration Date:** {cal}")
+    st.write(f"**Expiry Date:** {exp}")
+
+    st.info("🗾 Generating QR Code...")
+    qr_link, qr_path = generate_qr(serial)
+    st.image(qr_path, caption="Generated QR", width=200)
+    st.write(f"[🔗 QR Link]({qr_link})")
+
+    st.info("📄 Uploading to Google Drive...")
+    drive_url = upload_to_drive(TEMP_PDF, uploaded_file.name)
+    st.write(f"[🔗 Drive Link]({drive_url})")
+
+    st.info("📅 Updating Google Sheets...")
     try:
-        file_id = extract_drive_file_id(drive_url)
-        if not file_id:
-            st.error("⚠️ Invalid Drive URL!")
+        sheet = connect_to_sheets()
+        records = sheet.get_all_values()
+        serial_col_index = 2  # Serial is in the 3rd column
+
+        row_index = None
+        for i, row in enumerate(records):
+            if len(row) > serial_col_index and row[serial_col_index] == serial:
+                row_index = i + 1
+                break
+
+        row_data = [cert, model, serial, cal, exp, drive_url, qr_link]
+
+        if row_index:
+            sheet.update(f"A{row_index}:G{row_index}", [row_data])
+            st.success("✅ Existing entry updated in Google Sheets!")
         else:
-            st.info("📥 Downloading PDF...")
-            download_file_from_google_drive(file_id, TEMP_PDF)
-
-            st.info("🔍 Extracting data...")
-            cert, model, serial, cal, exp = extract_data_from_pdf(TEMP_PDF)
-
-            st.success("✅ Data Extracted:")
-            st.write(f"**Certificate No:** {cert}")
-            st.write(f"**Model:** {model}")
-            st.write(f"**Serial:** {serial}")
-            st.write(f"**Calibration Date:** {cal}")
-            st.write(f"**Expiry Date:** {exp}")
-
-            st.info("🧾 Generating QR Code...")
-            qr_link, qr_path = generate_qr(serial)
-            st.image(qr_path, caption="Generated QR", width=200)
-            st.write(f"[🔗 QR Link]({qr_link})")
-
-            st.info("📤 Updating Google Sheets...")
-            try:
-                sheet = connect_to_sheets()
-
-                # Check if serial exists
-                records = sheet.get_all_values()
-                serial_col_index = 2  # "Serial" is column C (index 2 because 0-based)
-
-                row_index = None
-                for i, row in enumerate(records):
-                    if len(row) > serial_col_index and row[serial_col_index] == serial:
-                        row_index = i + 1  # Sheet is 1-indexed
-                        break
-
-                row_data = [cert, model, serial, cal, exp, drive_url, qr_link]
-
-                if row_index:
-                    sheet.update(f"A{row_index}:G{row_index}", [row_data])
-                    st.success("✅ Existing entry updated in Google Sheets!")
-                else:
-                    sheet.append_row(row_data)
-                    st.success("✅ New entry added to Google Sheets!")
-
-            except Exception as e:
-                import traceback
-                error_details = traceback.format_exc()
-                st.error("❌ Failed to update Google Sheets.")
-                st.text(error_details)
+            sheet.append_row(row_data)
+            st.success("✅ New entry added to Google Sheets!")
 
     except Exception as e:
-        st.error(f"❌ Error: {e}")
+        import traceback
+        error_details = traceback.format_exc()
+        st.error("❌ Failed to update Google Sheets.")
+        st.text(error_details)
