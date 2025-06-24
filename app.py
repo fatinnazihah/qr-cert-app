@@ -69,26 +69,24 @@ def connect_to_sheets():
     client = gspread.authorize(creds)
     return client.open("Calibration Certificates").worksheet("certs")
 
+from googleapiclient.errors import HttpError
+
 def upload_to_drive(filepath, filename):
-    creds_dict = st.secrets["google_service_account"]
-    scopes = ["https://www.googleapis.com/auth/drive"]
-    creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    creds = service_account.Credentials.from_service_account_info(
+        st.secrets["google_service_account"],
+        scopes=["https://www.googleapis.com/auth/drive"]
+    )
     drive_service = build("drive", "v3", credentials=creds)
-
-    drive_folder_id = st.secrets["drive"]["folder_id"]  # ✅ fix is here
-
-    file_metadata = {
-        "name": filename,
-        "parents": [drive_folder_id]  # ✅ now it's valid
-    }
+    folder_id = st.secrets["drive"]["folder_id"]
     media = MediaFileUpload(filepath, mimetype="application/pdf")
-    uploaded_file = drive_service.files().create(
-        body=file_metadata,
-        media_body=media,
-        fields="id"
-    ).execute()
-    file_id = uploaded_file.get("id")
-    return f"https://drive.google.com/file/d/{file_id}/view"
+    body = {"name": filename, "parents": [folder_id]}
+    try:
+        file = drive_service.files().create(body=body, media_body=media, fields="id").execute()
+        return f"https://drive.google.com/file/d/{file['id']}/view"
+    except HttpError as err:
+        st.error(f"⚠️ Drive upload failed: {err.resp.status} – {err._get_reason()}")
+        return None
+
 
 # === Streamlit UI ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
