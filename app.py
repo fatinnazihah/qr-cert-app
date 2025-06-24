@@ -4,12 +4,12 @@ import re
 import qrcode
 import streamlit as st
 import gspread
-import json
-from io import BytesIO
 from datetime import datetime
+from io import BytesIO
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+from googleapiclient.errors import HttpError
 
 # === Config ===
 TEMP_PDF = "examplecert.pdf"
@@ -69,24 +69,35 @@ def connect_to_sheets():
     client = gspread.authorize(creds)
     return client.open("Calibration Certificates").worksheet("certs")
 
-from googleapiclient.errors import HttpError
-
-def upload_to_drive(filepath, filename):
+def upload_to_drive(filepath, serial):
     creds = service_account.Credentials.from_service_account_info(
         st.secrets["google_service_account"],
         scopes=["https://www.googleapis.com/auth/drive"]
     )
     drive_service = build("drive", "v3", credentials=creds)
     folder_id = st.secrets["drive"]["folder_id"]
+    filename = f"{serial}.pdf"
+
+    # Search for existing file with same name
+    query = f"name = '{filename}' and '{folder_id}' in parents and mimeType = 'application/pdf' and trashed = false"
+    results = drive_service.files().list(q=query, spaces='drive', fields='files(id)').execute()
+    files = results.get('files', [])
     media = MediaFileUpload(filepath, mimetype="application/pdf")
-    body = {"name": filename, "parents": [folder_id]}
+
     try:
-        file = drive_service.files().create(body=body, media_body=media, fields="id").execute()
-        return f"https://drive.google.com/file/d/{file['id']}/view"
+        if files:
+            # Replace existing file
+            file_id = files[0]['id']
+            drive_service.files().update(fileId=file_id, media_body=media).execute()
+            return f"https://drive.google.com/file/d/{file_id}/view"
+        else:
+            # Upload new file
+            file_metadata = {"name": filename, "parents": [folder_id]}
+            uploaded = drive_service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+            return f"https://drive.google.com/file/d/{uploaded['id']}/view"
     except HttpError as err:
         st.error(f"⚠️ Drive upload failed: {err.resp.status} – {err._get_reason()}")
         return None
-
 
 # === Streamlit UI ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
@@ -114,8 +125,9 @@ if uploaded_file:
     st.write(f"[🔗 QR Link]({qr_link})")
 
     st.info("📄 Uploading to Google Drive...")
-    drive_url = upload_to_drive(TEMP_PDF, uploaded_file.name)
-    st.write(f"[🔗 Drive Link]({drive_url})")
+    drive_url = upload_to_drive(TEMP_PDF, serial)
+    if drive_url:
+        st.write(f"[🔗 Drive Link]({drive_url})")
 
     st.info("📅 Updating Google Sheets...")
     try:
@@ -137,9 +149,7 @@ if uploaded_file:
         else:
             sheet.append_row(row_data)
             st.success("✅ New entry added to Google Sheets!")
-
     except Exception as e:
         import traceback
-        error_details = traceback.format_exc()
         st.error("❌ Failed to update Google Sheets.")
-        st.text(error_details)
+        st.text(traceback.format_exc())
