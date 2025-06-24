@@ -74,11 +74,14 @@ def generate_qr(serial):
     img.save(img_path)
     return qr_url, img_path
 
+from google.oauth2 import service_account
+
 def connect_to_sheets():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("snappy-figure-462905-c1-614b0b87320a.json", scope)
+    creds_dict = st.secrets["google_service_account"]
+    creds = service_account.Credentials.from_service_account_info(creds_dict)
     client = gspread.authorize(creds)
     return client.open("Calibration Certificates").worksheet("certs")
+
 
 # === Streamlit UI ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
