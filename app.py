@@ -5,6 +5,7 @@ import qrcode
 import streamlit as st
 import gspread
 from datetime import datetime
+from io import BytesIO
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -44,7 +45,7 @@ def extract_data_from_pdf(pdf_path):
 
     date_lines = [
         l for l in lines
-        if re.match(r"^(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}$", l)
+        if re.match(r"^(January|February|March|April|May|June|July|August|September|October|November|December)\\s+\\d{1,2},\\s+\\d{4}$", l)
     ]
     cal_date = format_date(date_lines[0]) if len(date_lines) > 0 else "Invalid"
     exp_date = format_date(date_lines[1]) if len(date_lines) > 1 else "Invalid"
@@ -67,30 +68,29 @@ def connect_to_sheets():
     client = gspread.authorize(creds)
     return client.open("Calibration Certificates").worksheet("certs")
 
-def upload_to_drive(filepath, serial):
+def upload_to_drive(filepath, serial, is_qr=False):
     creds = service_account.Credentials.from_service_account_info(
         st.secrets["google_service_account"],
         scopes=["https://www.googleapis.com/auth/drive"]
     )
     drive_service = build("drive", "v3", credentials=creds)
-    folder_id = st.secrets["drive"]["folder_id"]
-    filename = f"{serial}.pdf"
+    folder_id = st.secrets["drive"]["folder_id"] if not is_qr else st.secrets["drive"]["qr_folder_id"]
+    filename = f"qr_{serial}.png" if is_qr else f"{serial}.pdf"
 
-    query = f"name = '{filename}' and '{folder_id}' in parents and mimeType = 'application/pdf' and trashed = false"
+    query = f"name = '{filename}' and '{folder_id}' in parents and trashed = false"
     results = drive_service.files().list(q=query, spaces='drive', fields='files(id)').execute()
     files = results.get('files', [])
-    media = MediaFileUpload(filepath, mimetype="application/pdf")
+    media = MediaFileUpload(filepath, mimetype="image/png" if is_qr else "application/pdf")
 
     try:
         if files:
             file_id = files[0]['id']
             drive_service.files().update(fileId=file_id, media_body=media).execute()
+            return f"https://drive.google.com/file/d/{file_id}/view"
         else:
             file_metadata = {"name": filename, "parents": [folder_id]}
             uploaded = drive_service.files().create(body=file_metadata, media_body=media, fields="id").execute()
-            file_id = uploaded["id"]
-
-        return f"https://drive.google.com/file/d/{file_id}/view"
+            return f"https://drive.google.com/file/d/{uploaded['id']}/view"
     except HttpError as err:
         st.error(f"⚠️ Drive upload failed: {err.resp.status} – {err._get_reason()}")
         return None
@@ -122,16 +122,20 @@ if uploaded_file:
 
     st.info("📄 Uploading to Google Drive...")
     drive_url = upload_to_drive(TEMP_PDF, serial)
+    qr_drive_url = upload_to_drive(qr_path, serial, is_qr=True)
+
     if drive_url:
         st.write(f"[🔗 Drive Link]({drive_url})")
+    if qr_drive_url:
+        st.write(f"[🖼️ QR Image Link]({qr_drive_url})")
 
     st.info("📅 Updating Google Sheets...")
     try:
         sheet = connect_to_sheets()
         records = sheet.get_all_values()
-        serial_col_index = 2  # Column C is serial
-        row_index = None
+        serial_col_index = 2  # Serial is in the 3rd column
 
+        row_index = None
         for i, row in enumerate(records):
             if len(row) > serial_col_index and row[serial_col_index] == serial:
                 row_index = i + 1
@@ -140,7 +144,6 @@ if uploaded_file:
         row_data = [cert, model, serial, cal, exp, drive_url, qr_link]
 
         if row_index:
-            # Always update full row to refresh drive link + qr
             sheet.update(f"A{row_index}:G{row_index}", [row_data])
             st.success("✅ Existing entry updated in Google Sheets!")
         else:
