@@ -141,10 +141,10 @@ if uploaded_file:
                 row_index = i + 1
                 break
 
-        row_data = [cert, model, serial, cal, exp, drive_url, qr_link]
+        row_data = [cert, model, serial, cal, exp, drive_url, qr_drive_url, qr_link]
 
         if row_index:
-            sheet.update(f"A{row_index}:G{row_index}", [row_data])
+            sheet.update(f"A{row_index}:H{row_index}", [row_data])
             st.success("✅ Existing entry updated in Google Sheets!")
         else:
             sheet.append_row(row_data)
