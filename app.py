@@ -5,6 +5,7 @@ import qrcode
 import requests
 import streamlit as st
 import gspread
+import json
 from io import BytesIO
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs
@@ -78,22 +79,13 @@ def generate_qr(serial):
     return qr_url, img_path
 
 def connect_to_sheets():
-    creds_dict = st.secrets["google_service_account"]
+    with open("service_account.json") as f:
+        creds_dict = json.load(f)
+
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
     creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=scopes)
-
-    # 🔍 Test if the credentials are valid
-    try:
-        _ = creds.token  # forces lazy token refresh
-        print("✅ Service account credentials loaded successfully.")
-    except Exception as e:
-        print("❌ Invalid credentials!")
-        raise e
-
     client = gspread.authorize(creds)
     return client.open("Calibration Certificates").worksheet("certs")
-
-
 # === Streamlit UI ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
 st.title("📄 Certificate Extractor + QR Generator")
