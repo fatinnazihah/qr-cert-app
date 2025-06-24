@@ -45,7 +45,7 @@ def extract_data_from_pdf(pdf_path):
 
     date_lines = [
         l for l in lines
-        if re.match(r"^(January|February|March|April|May|June|July|August|September|October|November|December)\\s+\\d{1,2},\\s+\\d{4}$", l)
+        if re.match(r"^(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}$", l)
     ]
     cal_date = format_date(date_lines[0]) if len(date_lines) > 0 else "Invalid"
     exp_date = format_date(date_lines[1]) if len(date_lines) > 1 else "Invalid"
