@@ -75,9 +75,11 @@ def upload_to_drive(filepath, filename):
     creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=scopes)
     drive_service = build("drive", "v3", credentials=creds)
 
+    drive_folder_id = st.secrets["drive_folder_id"]  # ✅ fix is here
+
     file_metadata = {
         "name": filename,
-        "parents": [drive_folder_id = st.secrets["drive_folder_id"]]
+        "parents": [drive_folder_id]  # ✅ now it's valid
     }
     media = MediaFileUpload(filepath, mimetype="application/pdf")
     uploaded_file = drive_service.files().create(
