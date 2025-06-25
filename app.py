@@ -29,21 +29,15 @@ def extract_data_from_pdf(pdf_path):
     cert_match = re.search(r"\d{1,3}/\d{1,3}/\d{4}\.SRV", text)
     cert_num = cert_match.group(0) if cert_match else "Unknown"
 
-    # More robust serial number logic
-    serial = "Unknown"
-    for i, line in enumerate(lines):
-        if "serial number" in line.lower():
-            for j in range(1, 4):
-                if i + j < len(lines):
-                    candidate = lines[i + j].strip()
-                    if not any(k in candidate.lower() for k in ["calibration", "expiry", "model", "certificate", "date"]):
-                        serial = candidate
-                        break
-            break
+    try:
+        index_serial = next(i for i, l in enumerate(lines) if "serial number" in l.lower())
+        serial = lines[index_serial + 1]
+    except:
+        serial = "Unknown"
 
     try:
         cert_line = lines.index(cert_num)
-        model = lines[cert_line + 2].strip()
+        model = lines[cert_line + 2]
     except:
         model = "Unknown"
 
