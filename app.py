@@ -1,6 +1,5 @@
 import os
 import re
-import json
 import fitz  # PyMuPDF
 import qrcode
 import streamlit as st
@@ -48,29 +47,11 @@ def extract_data_from_pdf(pdf_path):
 
     return cert_num, model, serial, cal, exp, lot
 
-def generate_qr(serial, cert, model, cal, exp, lot):
-    fallback_data = {
-        "serial": serial,
-        "cert": cert,
-        "model": model,
-        "cal": cal,
-        "exp": exp,
-        "lot": lot
-    }
-    qr_payload = {
-        "url": f"https://qrcertificates-30ddb.web.app/?id={serial}",
-        "data": fallback_data
-    }
-    qr_text = f"""
-    Certificate No: {cert}
-    Model: {model}
-    Serial No: {serial}
-    Calibration: {cal}
-    Expiry: {exp}
-    Cylinder Lot#: {lot}"""
+def generate_qr(serial):
+    url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
-    qrcode.make(qr_text).save(path)
-    return qr_payload["url"], path
+    qrcode.make(url).save(path)
+    return url, path
 
 def connect_to_sheets():
     creds = st.secrets["google_service_account"]
@@ -112,7 +93,7 @@ def upload_to_drive(filepath, serial, is_qr=False):
 # === UI ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
 st.title("📄 Certificate Extractor + QR Generator")
-st.write("Upload a PDF certificate to extract data, generate a QR code (offline-safe), upload to Google Drive, and sync with Google Sheets.")
+st.write("Upload a PDF certificate to extract data, generate a QR code, upload to Google Drive, and sync with Google Sheets.")
 
 file = st.file_uploader("📄 Upload Certificate PDF", type=["pdf"])
 
@@ -131,7 +112,7 @@ if file:
     st.write(f"**Expiry Date:** {exp}")
     st.write(f"**Cylinder Lot #:** {lot}")
 
-    qr_link, qr_path = generate_qr(serial, cert, model, cal, exp, lot)
+    qr_link, qr_path = generate_qr(serial)
     st.image(qr_path, caption="Generated QR", width=200)
     st.write(f"[🔗 QR Link]({qr_link})")
 
@@ -142,7 +123,7 @@ if file:
     if qr_url: st.write(f"[🖼️ QR Image Link]({qr_url})")
 
     try:
-        st.info("🗓️ Updating Google Sheets...")
+        st.info("📅 Updating Google Sheets...")
         sheet = connect_to_sheets()
         data = sheet.get_all_values()
         serial_col = 2
