@@ -26,21 +26,22 @@ def extract_data_from_pdf(pdf_path):
     text = "".join([page.get_text() for page in doc])
     lines = [line.strip() for line in text.splitlines() if line.strip()]
 
+    # Certificate Number
     cert_match = re.search(r"\d{1,3}/\d{1,3}/\d{4}\.SRV", text)
     cert_num = cert_match.group(0) if cert_match else "Unknown"
 
-    try:
-        index_serial = next(i for i, l in enumerate(lines) if "serial number" in l.lower())
-        serial = lines[index_serial + 1]
-    except:
-        serial = "Unknown"
+    # Serial Number (pattern like 2210017-003)
+    serial_match = re.search(r"\b\d{7}-\d{3}\b", text)
+    serial = serial_match.group(0) if serial_match else "Unknown"
 
+    # Model (assumed to be 2 lines after cert_num)
     try:
         cert_line = lines.index(cert_num)
-        model = lines[cert_line + 2]
+        model = lines[cert_line + 2].strip()
     except:
         model = "Unknown"
 
+    # Calibration & Expiry Dates
     date_lines = [
         l for l in lines
         if re.match(r"^(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}$", l)
@@ -48,6 +49,7 @@ def extract_data_from_pdf(pdf_path):
     cal_date = format_date(date_lines[0]) if len(date_lines) > 0 else "Invalid"
     exp_date = format_date(date_lines[1]) if len(date_lines) > 1 else "Invalid"
 
+    # Cylinder Lot Number
     lot_match = re.search(r"Cylinder Lot#\s*(\d+)", text)
     lot_number = lot_match.group(1) if lot_match else "Unknown"
 
