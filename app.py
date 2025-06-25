@@ -61,17 +61,13 @@ def generate_qr(serial, cert, model, cal, exp, lot):
         "url": f"https://qrcertificates-30ddb.web.app/?id={serial}",
         "data": fallback_data
     }
-    qr_text = f"""CERTIFICATE INFO
-    --------------
+    qr_text = f"""
     Certificate No: {cert}
     Model: {model}
     Serial No: {serial}
     Calibration: {cal}
     Expiry: {exp}
-    Cylinder Lot#: {lot}
-    
-    This QR code can also be scanned online:
-    https://qrcertificates-30ddb.web.app/?id={serial}"""
+    Cylinder Lot#: {lot}"""
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
     qrcode.make(qr_text).save(path)
     return qr_payload["url"], path
