@@ -50,7 +50,11 @@ def extract_data_from_pdf(pdf_path):
     cal_date = format_date(date_lines[0]) if len(date_lines) > 0 else "Invalid"
     exp_date = format_date(date_lines[1]) if len(date_lines) > 1 else "Invalid"
 
-    return cert_num, model, serial, cal_date, exp_date
+    # Extract Cylinder Lot
+    lot_match = re.search(r"Cylinder Lot#\s*(\d+)", text)
+    lot_number = lot_match.group(1) if lot_match else "Unknown"
+
+    return cert_num, model, serial, cal_date, exp_date, lot_number
 
 def generate_qr(serial):
     qr_url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
@@ -106,7 +110,7 @@ if uploaded_file:
         f.write(uploaded_file.read())
 
     st.info("🔍 Extracting data...")
-    cert, model, serial, cal, exp = extract_data_from_pdf(TEMP_PDF)
+    cert, model, serial, cal, exp, lot = extract_data_from_pdf(TEMP_PDF)
 
     st.success("✅ Data Extracted:")
     st.write(f"**Certificate No:** {cert}")
@@ -114,6 +118,7 @@ if uploaded_file:
     st.write(f"**Serial:** {serial}")
     st.write(f"**Calibration Date:** {cal}")
     st.write(f"**Expiry Date:** {exp}")
+    st.write(f"**Cylinder Lot #:** {lot}")
 
     st.info("🗾 Generating QR Code...")
     qr_link, qr_path = generate_qr(serial)
@@ -141,10 +146,11 @@ if uploaded_file:
                 row_index = i + 1
                 break
 
-        row_data = [cert, model, serial, cal, exp, drive_url, qr_drive_url, qr_link]
+        # Now include the Cylinder Lot in the 9th column (Column I)
+        row_data = [cert, model, serial, cal, exp, drive_url, qr_drive_url, qr_link, lot]
 
         if row_index:
-            sheet.update(f"A{row_index}:H{row_index}", [row_data])
+            sheet.update(f"A{row_index}:I{row_index}", [row_data])
             st.success("✅ Existing entry updated in Google Sheets!")
         else:
             sheet.append_row(row_data)
