@@ -9,13 +9,13 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
+import urllib.parse
 
 # === Config ===
 TEMP_PDF = "examplecert.pdf"
 QR_DIR = "qrcodes"
 os.makedirs(QR_DIR, exist_ok=True)
 
-# === Helpers ===
 def format_date(date_str):
     try:
         return datetime.strptime(date_str, "%B %d, %Y").strftime("%Y-%m-%d")
@@ -47,11 +47,23 @@ def extract_data_from_pdf(pdf_path):
 
     return cert_num, model, serial, cal, exp, lot
 
-def generate_qr(serial):
-    url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
+def generate_qr_with_data(serial, cert, model, cal, exp, lot):
+    # Construct URL with embedded data in hash fragment (URL-encoded)
+    base_url = "https://qrcertificates-30ddb.web.app/offline.html"
+    params = {
+        "cert": cert,
+        "model": model,
+        "serial": serial,
+        "cal": cal,
+        "exp": exp,
+        "lot": lot,
+    }
+    hash_data = urllib.parse.urlencode(params)
+    full_url = f"{base_url}#{hash_data}"
+
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
-    qrcode.make(url).save(path)
-    return url, path
+    qrcode.make(full_url).save(path)
+    return full_url, path
 
 def connect_to_sheets():
     creds = st.secrets["google_service_account"]
@@ -93,7 +105,7 @@ def upload_to_drive(filepath, serial, is_qr=False):
 # === UI ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
 st.title("📄 Certificate Extractor + QR Generator")
-st.write("Upload a PDF certificate to extract data, generate a QR code, upload to Google Drive, and sync with Google Sheets.")
+st.write("Upload a PDF certificate to extract data, generate a QR code with embedded data, upload to Google Drive, and sync with Google Sheets.")
 
 file = st.file_uploader("📄 Upload Certificate PDF", type=["pdf"])
 
@@ -112,15 +124,17 @@ if file:
     st.write(f"**Expiry Date:** {exp}")
     st.write(f"**Cylinder Lot #:** {lot}")
 
-    qr_link, qr_path = generate_qr(serial)
-    st.image(qr_path, caption="Generated QR", width=200)
+    qr_link, qr_path = generate_qr_with_data(serial, cert, model, cal, exp, lot)
+    st.image(qr_path, caption="Generated QR (data embedded)", width=200)
     st.write(f"[🔗 QR Link]({qr_link})")
 
     pdf_url = upload_to_drive(TEMP_PDF, serial)
     qr_url = upload_to_drive(qr_path, serial, is_qr=True)
 
-    if pdf_url: st.write(f"[📁 PDF Drive Link]({pdf_url})")
-    if qr_url: st.write(f"[🖼️ QR Image Link]({qr_url})")
+    if pdf_url:
+        st.write(f"[📁 PDF Drive Link]({pdf_url})")
+    if qr_url:
+        st.write(f"[🖼️ QR Image Link]({qr_url})")
 
     try:
         st.info("📅 Updating Google Sheets...")
