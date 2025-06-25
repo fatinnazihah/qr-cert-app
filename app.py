@@ -147,7 +147,7 @@ if uploaded_file:
                 break
 
         # Now include the Cylinder Lot in the 9th column (Column I)
-        row_data = [cert, model, serial, cal, exp, drive_url, qr_drive_url, qr_link, lot]
+        row_data = [cert, model, serial, cal, exp, lot, drive_url, qr_drive_url, qr_link]
 
         if row_index:
             sheet.update(f"A{row_index}:I{row_index}", [row_data])
