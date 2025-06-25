@@ -5,7 +5,6 @@ import qrcode
 import streamlit as st
 import gspread
 from datetime import datetime
-from io import BytesIO
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -16,7 +15,6 @@ QR_DIR = "qrcodes"
 TXT_DB = "offline_cert_data.txt"
 os.makedirs(QR_DIR, exist_ok=True)
 
-# === Helpers ===
 def format_date(date_str):
     try:
         return datetime.strptime(date_str, "%B %d, %Y").strftime("%Y-%m-%d")
@@ -31,6 +29,7 @@ def extract_data_from_pdf(pdf_path):
     cert_match = re.search(r"\d{1,3}/\d{1,3}/\d{4}\.SRV", text)
     cert_num = cert_match.group(0) if cert_match else "Unknown"
 
+    # More robust serial number logic
     serial = "Unknown"
     for i, line in enumerate(lines):
         if "serial number" in line.lower():
