@@ -11,9 +11,9 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 
-# === Config ===
 TEMP_PDF = "examplecert.pdf"
 QR_DIR = "qrcodes"
+TXT_DB = "offline_cert_data.txt"
 os.makedirs(QR_DIR, exist_ok=True)
 
 # === Helpers ===
@@ -45,13 +45,12 @@ def extract_data_from_pdf(pdf_path):
 
     date_lines = [
         l for l in lines
-        if re.match(r"^(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}$", l)
+        if re.match(r"^(January|February|March|April|May|June|July|August|September|October|November|December)\\s+\\d{1,2},\\s+\\d{4}$", l)
     ]
     cal_date = format_date(date_lines[0]) if len(date_lines) > 0 else "Invalid"
     exp_date = format_date(date_lines[1]) if len(date_lines) > 1 else "Invalid"
 
-    # Extract Cylinder Lot
-    lot_match = re.search(r"Cylinder Lot#\s*(\d+)", text)
+    lot_match = re.search(r"Cylinder Lot#\\s*(\\d+)", text)
     lot_number = lot_match.group(1) if lot_match else "Unknown"
 
     return cert_num, model, serial, cal_date, exp_date, lot_number
@@ -64,10 +63,7 @@ def generate_qr(serial):
 
 def connect_to_sheets():
     creds_dict = st.secrets["google_service_account"]
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
+    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=scopes)
     client = gspread.authorize(creds)
     return client.open("Calibration Certificates").worksheet("certs")
@@ -98,6 +94,27 @@ def upload_to_drive(filepath, serial, is_qr=False):
     except HttpError as err:
         st.error(f"⚠️ Drive upload failed: {err.resp.status} – {err._get_reason()}")
         return None
+
+def update_offline_txt():
+    try:
+        sheet = connect_to_sheets()
+        rows = sheet.get_all_values()[1:]  # Skip header
+        txt_lines = []
+        for row in rows:
+            serial = row[2] if len(row) > 2 else "Unknown"
+            cert = row[0] if len(row) > 0 else "Unknown"
+            model = row[1] if len(row) > 1 else "Unknown"
+            cal = row[3] if len(row) > 3 else "Invalid"
+            exp = row[4] if len(row) > 4 else "Invalid"
+            lot = row[5] if len(row) > 5 else "Unknown"
+            txt_lines.append(f"{serial}\t{cert}\t{model}\t{cal}\t{exp}\t{lot}")
+
+        with open(TXT_DB, "w", encoding="utf-8") as f:
+            f.write("\n".join(txt_lines))
+        st.success("📝 offline_cert_data.txt updated!")
+    except Exception as e:
+        st.warning("⚠️ Failed to update offline_cert_data.txt")
+        st.text(str(e))
 
 # === Streamlit UI ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
@@ -138,7 +155,7 @@ if uploaded_file:
     try:
         sheet = connect_to_sheets()
         records = sheet.get_all_values()
-        serial_col_index = 2  # Serial is in the 3rd column
+        serial_col_index = 2
 
         row_index = None
         for i, row in enumerate(records):
@@ -146,7 +163,6 @@ if uploaded_file:
                 row_index = i + 1
                 break
 
-        # Now include the Cylinder Lot in the 9th column (Column I)
         row_data = [cert, model, serial, cal, exp, lot, drive_url, qr_drive_url, qr_link]
 
         if row_index:
@@ -155,6 +171,9 @@ if uploaded_file:
         else:
             sheet.append_row(row_data)
             st.success("✅ New entry added to Google Sheets!")
+
+        update_offline_txt()
+
     except Exception as e:
         import traceback
         st.error("❌ Failed to update Google Sheets.")
