@@ -52,67 +52,52 @@ def extract_data_from_pdf(pdf_path):
 
 def generate_qr(serial):
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
-    canvas_size = 500
-    qr_size = 360
+    qr_size = 500
     qr_img = qrcode.make(url).convert("RGB").resize((qr_size, qr_size))
 
-    # === Load logo from GitHub ===
-    logo_img = None
+    # === Load + resize logo to 20% of QR size ===
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-        # Resize logo to 20% of QR size
-        max_logo_width = int(qr_size * 0.2)
-        scale = max_logo_width / logo_img.width
-        new_size = (max_logo_width, int(logo_img.height * scale))
-        logo_img = logo_img.resize(new_size, Image.ANTIALIAS)
+        logo_scale = 0.2  # 20%
+        logo_w = int(qr_size * logo_scale)
+        scale = logo_w / logo_img.width
+        logo_h = int(logo_img.height * scale)
+        logo_img = logo_img.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
+
+        # Paste logo in center of QR
+        pos = ((qr_size - logo_w) // 2, (qr_size - logo_h) // 2)
+        qr_img.paste(logo_img, pos, mask=logo_img)
+
     except Exception as e:
         print("⚠️ Logo load failed:", e)
 
-    # === SN Label ===
+    # === Add SN label below ===
     label = f"SN: {serial}"
     try:
-        font = ImageFont.truetype("arialbd.ttf", 22)
+        font = ImageFont.truetype("arialbd.ttf", 24)
     except:
         font = ImageFont.load_default()
 
     dummy = Image.new("RGB", (1, 1))
     draw_dummy = ImageDraw.Draw(dummy)
     label_bbox = draw_dummy.textbbox((0, 0), label, font=font)
-    label_width = label_bbox[2] - label_bbox[0]
-    label_height = label_bbox[3] - label_bbox[1]
+    label_w = label_bbox[2] - label_bbox[0]
+    label_h = label_bbox[3] - label_bbox[1]
 
-    # === Create final image ===
-    final_img = Image.new("RGB", (canvas_size, canvas_size), "white")
-    draw = ImageDraw.Draw(final_img)
-
-    # === Center everything vertically ===
-    spacing = 10
-    total_content_height = (
-        (logo_img.height if logo_img else 0) +
-        spacing +
-        qr_size +
-        spacing +
-        label_height
-    )
-    y = (canvas_size - total_content_height) // 2
-
-    # Paste logo
-    if logo_img:
-        lx = (canvas_size - logo_img.width) // 2
-        final_img.paste(logo_img, (lx, y), mask=logo_img)
-        y += logo_img.height + spacing
+    # Create final image with label
+    padding = 10
+    final_height = qr_size + label_h + padding * 2
+    final_img = Image.new("RGB", (qr_size, final_height), "white")
 
     # Paste QR
-    qr_x = (canvas_size - qr_size) // 2
-    final_img.paste(qr_img, (qr_x, y))
-    y += qr_size + spacing
+    final_img.paste(qr_img, (0, 0))
 
-    # Draw SN label
-    label_x = (canvas_size - label_width) // 2
-    draw.text((label_x, y), label, fill="black", font=font)
+    # Draw label centered
+    draw = ImageDraw.Draw(final_img)
+    draw.text(((qr_size - label_w) // 2, qr_size + padding), label, fill="black", font=font)
 
     # Save
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
