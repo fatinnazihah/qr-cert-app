@@ -55,44 +55,58 @@ def generate_qr(serial):
     size = 500
     qr = qrcode.make(url).convert("RGB").resize((size, size))
 
-    # Load logo (if possible)
+    # Load + resize logo
     logo = None
     try:
-        resp = requests.get("https://cahayahornbill.com/.../LOGO-A-CHSB.png", timeout=5)
+        resp = requests.get(
+            "https://cahayahornbill.com/wp-content/uploads/2024/10/cropped-LOGO-A-CHSB.png",
+            timeout=5
+        )
         logo = Image.open(BytesIO(resp.content)).convert("RGBA")
         max_w = int(size * 0.3)
-        if logo.width > max_w:
-            ratio = max_w/logo.width
-            logo = logo.resize((max_w, int(logo.height*ratio)), Image.ANTIALIAS)
-    except:
+        ratio = max_w / logo.width
+        logo = logo.resize((max_w, int(logo.height * ratio)), Image.ANTIALIAS)
+    except Exception as e:
+        print("⚠️ Logo fetch failed:", e)
         logo = None
 
+    # Prepare SN label
     label = f"SN: {serial}"
     try:
-        font = ImageFont.truetype("arialbd.ttf", 40)
+        font = ImageFont.truetype("arialbd.ttf", 40)  # Bold + bigger
     except:
         font = ImageFont.load_default()
+    draw_temp = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    bw, bh = draw_temp.textbbox((0, 0), label, font=font)[2:]
 
-    dummy = Image.new("RGB",(1,1)); d = ImageDraw.Draw(dummy)
-    bw, bh = d.textbbox((0,0), label, font=font)[2:]
-
+    # Canvas setup
     padding = 20
-    h_total = (logo.height if logo else 0) + size + bh + padding*3
+    h_logo = logo.height if logo else 0
+    h_total = h_logo + size + bh + padding * 3
     final = Image.new("RGB", (size, h_total), "white")
     draw = ImageDraw.Draw(final)
 
     y = padding
+
+    # Center logo
     if logo:
-        x = (size - logo.width)//2
-        final.paste(logo,(x,y),logo); y += logo.height + padding
+        x_logo = (size - logo.width) // 2
+        final.paste(logo, (x_logo, y), logo)
+        y += logo.height + padding
 
-    final.paste(qr, (0, y)); y += size + padding
+    # Center QR
+    final.paste(qr, ((size - size) // 2, y))
+    y += size + padding
 
-    x = (size - bw)//2
-    draw.text((x, y), label, fill="black", font=font)
+    # Center SN label
+    x_label = (size - bw) // 2
+    draw.text((x_label, y), label, fill="black", font=font)
 
+    # Save
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
-    final.save(path); return url, path
+    final.save(path)
+
+    return url, path
 
 
 def connect_to_sheets():
