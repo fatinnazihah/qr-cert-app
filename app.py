@@ -62,9 +62,9 @@ def generate_qr(serial):
 
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     qr_size = 500
-    logo_scale = 0.3  # 30% white center
+    logo_width_scale = 0.3  # % of QR width (not a square anymore)
 
-    # === Step 1: Generate QR Code and matrix ===
+    # === Step 1: Generate QR Code matrix ===
     qr = qrcode.QRCode(
         version=None,
         error_correction=ERROR_CORRECT_H,
@@ -73,45 +73,52 @@ def generate_qr(serial):
     )
     qr.add_data(url)
     qr.make(fit=True)
-    matrix = qr.get_matrix()  # 2D list of booleans
+    matrix = qr.get_matrix()
 
     box_size = qr_size // len(matrix)
     qr_pixel_size = box_size * len(matrix)
 
-    # === Step 2: Create blank canvas ===
-    qr_img = Image.new("RGB", (qr_pixel_size, qr_pixel_size), "white")
-    draw = ImageDraw.Draw(qr_img)
-
-    # === Step 3: Draw each module except center ===
-    center_start = int(len(matrix) * (0.5 - logo_scale / 2))
-    center_end = int(len(matrix) * (0.5 + logo_scale / 2))
-
-    for y in range(len(matrix)):
-        for x in range(len(matrix[y])):
-            if center_start <= x < center_end and center_start <= y < center_end:
-                continue  # skip center area
-            if matrix[y][x]:
-                draw.rectangle(
-                    [x * box_size, y * box_size, (x + 1) * box_size, (y + 1) * box_size],
-                    fill="black"
-                )
-
-    # === Step 4: Paste logo in center ===
+    # === Step 2: Load logo early to get its size ===
+    logo_img = None
+    logo_w_px = logo_h_px = 0
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-        logo_target_size = center_end - center_start
-        logo_px = logo_target_size * box_size
-        logo_img = logo_img.resize((logo_px, logo_px), Image.Resampling.LANCZOS)
-
-        qr_img.paste(logo_img, (center_start * box_size, center_start * box_size), logo_img)
+        # Set target logo width (e.g. 30% of QR width)
+        logo_w_px = int(qr_pixel_size * logo_width_scale)
+        scale = logo_w_px / logo_img.width
+        logo_h_px = int(logo_img.height * scale)
+        logo_img = logo_img.resize((logo_w_px, logo_h_px), Image.Resampling.LANCZOS)
 
     except Exception as e:
         print("⚠️ Logo load failed:", e)
 
-    # === Step 5: Add SN label ===
+    # === Step 3: Create base QR image ===
+    qr_img = Image.new("RGB", (qr_pixel_size, qr_pixel_size), "white")
+    draw = ImageDraw.Draw(qr_img)
+
+    # === Step 4: Draw QR, skip center logo space ===
+    x_start = (qr_pixel_size - logo_w_px) // 2
+    y_start = (qr_pixel_size - logo_h_px) // 2
+    x_end = x_start + logo_w_px
+    y_end = y_start + logo_h_px
+
+    for y in range(len(matrix)):
+        for x in range(len(matrix[y])):
+            px = x * box_size
+            py = y * box_size
+            if x_start <= px < x_end and y_start <= py < y_end:
+                continue  # skip logo zone
+            if matrix[y][x]:
+                draw.rectangle([px, py, px + box_size, py + box_size], fill="black")
+
+    # === Step 5: Paste logo (perfect fit) ===
+    if logo_img:
+        qr_img.paste(logo_img, (x_start, y_start), logo_img)
+
+    # === Step 6: Add SN label below ===
     label = f"SN: {serial}"
     try:
         font = ImageFont.truetype("arialbd.ttf", 28)
