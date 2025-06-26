@@ -59,7 +59,7 @@ def generate_qr(serial):
     logo_img = None
     logo_height = 0
     try:
-        logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/logo.png"
+        logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         resp = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(resp.content)).convert("RGBA")
 
