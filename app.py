@@ -53,10 +53,20 @@ Serial: {serial}
 Model: {model}
 Cal: {cal}
 Exp: {exp}
-Lot: {lot}"""
+Lot: {lot}
+Link: https://qrcertificates-30ddb.web.app/?id={serial}"""
+
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
-    qrcode.make(data_string).save(path)
+
+    # More controlled QR generation
+    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_Q)
+    qr.add_data(data_string)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    img.save(path)
+
     return data_string, path
+    
 
 def connect_to_sheets():
     creds = st.secrets["google_service_account"]
