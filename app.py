@@ -77,14 +77,14 @@ def generate_qr(serial):
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
     qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.NEAREST)
 
-    # === 2. Load and resize logo (proportional + a bit bigger) ===
+    # === 2. Load and resize logo (proportional + bigger) ===
     logo_img = None
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-        max_logo_size = 90  # increase size here
+        max_logo_size = 100  # Proportional enlargement
         ratio = min(max_logo_size / logo_img.width, max_logo_size / logo_img.height)
         new_size = (int(logo_img.width * ratio), int(logo_img.height * ratio))
         logo_img = logo_img.resize(new_size, Image.Resampling.LANCZOS)
@@ -92,9 +92,9 @@ def generate_qr(serial):
     except Exception as e:
         print("⚠️ Logo load failed:", e)
 
-    # === 3. Create solid white frame with rounded corners ===
+    # === 3. Create white rounded frame & composite logo ===
     if logo_img:
-        frame_size = 120
+        frame_size = 120  # Size of white frame
         frame_radius = 20
 
         frame = Image.new("RGBA", (frame_size, frame_size), (255, 255, 255, 255))
@@ -105,40 +105,50 @@ def generate_qr(serial):
             radius=frame_radius,
             fill=255
         )
-
         frame.putalpha(rounded_mask)
 
-        # Composite white rounded box onto QR
+        # Composite rounded white box
         box_x = (qr_size - frame_size) // 2
         box_y = (qr_size - frame_size) // 2
         qr_img.alpha_composite(frame, dest=(box_x, box_y))
 
-        # Paste logo in center
+        # Composite logo
         logo_x = (qr_size - logo_img.width) // 2
         logo_y = (qr_size - logo_img.height) // 2
         qr_img.alpha_composite(logo_img, dest=(logo_x, logo_y))
 
-    # === 4. Add SN label below ===
-    label = f"SN: {serial}"
-    try:
-        font = ImageFont.truetype("arialbd.ttf", 28)
-    except:
-        font = ImageFont.load_default()
+    # === 4. Add label: SN + Company ===
+    line1 = f"SN: {serial}"
+    line2 = "Cahaya Hornbill Sdn Bhd"
 
-    label_img = Image.new("RGBA", (qr_size, 50), "white")
+    try:
+        font_bold = ImageFont.truetype("arialbd.ttf", 32)  # Bold & big
+        font_small = ImageFont.truetype("arial.ttf", 24)   # Small caption
+    except:
+        font_bold = ImageFont.load_default()
+        font_small = ImageFont.load_default()
+
+    label_height = 80
+    label_img = Image.new("RGBA", (qr_size, label_height), "white")
     draw = ImageDraw.Draw(label_img)
-    bbox = draw.textbbox((0, 0), label, font=font)
-    text_w = bbox[2] - bbox[0]
-    text_h = bbox[3] - bbox[1]
-    draw.text(((qr_size - text_w) // 2, (50 - text_h) // 2), label, fill="black", font=font)
+
+    # Line 1
+    bbox1 = draw.textbbox((0, 0), line1, font=font_bold)
+    w1 = bbox1[2] - bbox1[0]
+    draw.text(((qr_size - w1) // 2, 5), line1, fill="black", font=font_bold)
+
+    # Line 2
+    bbox2 = draw.textbbox((0, 0), line2, font=font_small)
+    w2 = bbox2[2] - bbox2[0]
+    draw.text(((qr_size - w2) // 2, 42), line2, fill="black", font=font_small)
 
     # === 5. Combine final image ===
-    final_img = Image.new("RGBA", (qr_size, qr_size + 50), "white")
+    final_img = Image.new("RGBA", (qr_size, qr_size + label_height), "white")
     final_img.paste(qr_img, (0, 0), qr_img)
     final_img.paste(label_img, (0, qr_size), label_img)
 
     # === 6. Save to disk ===
-    path = os.path.join(QR_DIR, f"qr_{serial}.png")
+    path = os.path.join("qrcodes", f"qr_{serial}.png")
     final_img.convert("RGB").save(path)
 
     return url, path
