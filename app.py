@@ -109,7 +109,9 @@ def generate_qr(serial):
 
     label_img = Image.new("RGB", (qr_size, 50), "white")
     draw = ImageDraw.Draw(label_img)
-    text_w, text_h = draw.textsize(label, font=font)
+    bbox = draw.textbbox((0, 0), label, font=font)
+    text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
     draw.text(((qr_size - text_w) // 2, (50 - text_h) // 2), label, fill="black", font=font)
 
     final_img = Image.new("RGB", (qr_size, qr_size + 50), "white")
