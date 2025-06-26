@@ -49,7 +49,6 @@ def extract_data_from_pdf(pdf_path):
     lot = lot.group(1) if lot else "Unknown"
 
     return cert_num, model, serial, cal, exp, lot
-
 def generate_qr(serial):
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     qr_size = 500
@@ -60,47 +59,50 @@ def generate_qr(serial):
     logo_height = 0
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
-        resp = requests.get(logo_url, timeout=5)
-        logo_img = Image.open(BytesIO(resp.content)).convert("RGBA")
+        response = requests.get(logo_url, timeout=5)
+        logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-        max_logo_w = int(qr_size * 0.3)
-        scale = max_logo_w / logo_img.width
-        logo_img = logo_img.resize((max_logo_w, int(logo_img.height * scale)), Image.ANTIALIAS)
+        # Resize logo to 30% of QR width
+        max_logo_width = int(qr_size * 0.3)
+        scale = max_logo_width / logo_img.width
+        logo_img = logo_img.resize((max_logo_width, int(logo_img.height * scale)), Image.ANTIALIAS)
         logo_height = logo_img.height
     except Exception as e:
-        print("⚠️ Logo load failed, skipping:", e)
-        logo_img = None
+        print("⚠️ Logo load failed:", e)
 
-    # === Serial label ===
+    # === SN Label ===
     label = f"SN: {serial}"
     try:
-        font = ImageFont.truetype("arialbd.ttf", 38)
+        font = ImageFont.truetype("arialbd.ttf", 38)  # Bold, large
     except:
         font = ImageFont.load_default()
-    draw_tmp = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-    bbox = draw_tmp.textbbox((0, 0), label, font=font)
-    lw, lh = bbox[2] - bbox[0], bbox[3] - bbox[1]
 
-    # === Build final canvas ===
-    pad = 20
-    h = (logo_height if logo_img else 0) + qr_size + lh + pad * 3
-    final = Image.new("RGB", (qr_size, h), "white")
-    draw = ImageDraw.Draw(final)
-    y = pad
+    draw_dummy = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    bbox = draw_dummy.textbbox((0, 0), label, font=font)
+    label_width = bbox[2] - bbox[0]
+    label_height = bbox[3] - bbox[1]
+
+    # === Combine all ===
+    padding = 30
+    total_height = (logo_height if logo_img else 0) + qr_size + label_height + (padding * 3)
+    final_img = Image.new("RGB", (qr_size, total_height), "white")
+    draw = ImageDraw.Draw(final_img)
+    y = padding
 
     if logo_img:
-        x = (qr_size - logo_img.width)//2
-        final.paste(logo_img, (x, y), logo_img)
-        y += logo_height + pad
+        x = (qr_size - logo_img.width) // 2
+        final_img.paste(logo_img, (x, y), mask=logo_img)
+        y += logo_img.height + padding
 
-    final.paste(qr_img, (0, y))
-    y += qr_size + pad
+    final_img.paste(qr_img, (0, y))
+    y += qr_size + padding
 
-    x = (qr_size - lw)//2
+    x = (qr_size - label_width) // 2
     draw.text((x, y), label, fill="black", font=font)
 
+    # === Save and return ===
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
-    final.save(path)
+    final_img.save(path)
     return url, path
 
 def connect_to_sheets():
