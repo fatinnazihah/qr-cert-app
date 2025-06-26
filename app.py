@@ -58,102 +58,65 @@ from qrcode.constants import ERROR_CORRECT_H
 
 def generate_qr(serial):
     import qrcode
-    from qrcode.image.base import BaseImage
+    from qrcode.constants import ERROR_CORRECT_H
+    from PIL import Image, ImageDraw, ImageFont
+    from io import BytesIO
+    import requests
 
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     qr_size = 500
-    logo_width_scale = 0.3       # % of QR width (actual logo size)
-    frame_padding_ratio = 1.2    # white box = 120% of logo size
 
-    # === Step 1: Generate QR Code matrix ===
+    # === 1. Generate QR code ===
     qr = qrcode.QRCode(
-        version=None,
         error_correction=ERROR_CORRECT_H,
         box_size=10,
         border=4
     )
     qr.add_data(url)
     qr.make(fit=True)
-    matrix = qr.get_matrix()
+    qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+    qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.NEAREST)
 
-    box_size = qr_size // len(matrix)
-    qr_pixel_size = box_size * len(matrix)
-
-    # === Step 2: Load logo early to get its size ===
+    # === 2. Load logo (fixed 120x120px) ===
+    logo_w, logo_h = 120, 120
     logo_img = None
-    logo_w_px = logo_h_px = 0
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
-
-        # 🧼 Trim transparent padding
-        logo_img = logo_img.crop(logo_img.getbbox())
-
-        # Resize logo
-        logo_w_px = int(qr_pixel_size * logo_width_scale)
-        scale = logo_w_px / logo_img.width
-        logo_h_px = int(logo_img.height * scale)
-        logo_img = logo_img.resize((logo_w_px, logo_h_px), Image.Resampling.LANCZOS)
-
+        logo_img = logo_img.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
     except Exception as e:
         print("⚠️ Logo load failed:", e)
 
-    # === Step 3: Create base QR image ===
-    qr_img = Image.new("RGB", (qr_pixel_size, qr_pixel_size), "white")
-    draw = ImageDraw.Draw(qr_img)
-
-    # === Step 4: Define padded white box (in pixels) ===
-    padded_w = int(logo_w_px * frame_padding_ratio)
-    padded_h = int(logo_h_px * frame_padding_ratio)
-    white_x0 = (qr_pixel_size - padded_w) // 2
-    white_y0 = (qr_pixel_size - padded_h) // 2
-    white_x1 = white_x0 + padded_w
-    white_y1 = white_y0 + padded_h
-
-    # === Step 5: Draw QR, skipping the white frame area ===
-    for y in range(len(matrix)):
-        for x in range(len(matrix[y])):
-            px = x * box_size
-            py = y * box_size
-            if white_x0 <= px < white_x1 and white_y0 <= py < white_y1:
-                continue  # skip logo area
-            if matrix[y][x]:
-                draw.rectangle([px, py, px + box_size, py + box_size], fill="black")
-
-   # === Step 6: Paste logo perfectly centered in white frame ===
+    # === 3. Paste white box + logo ===
     if logo_img:
-        logo_x = (qr_pixel_size - logo_w_px) // 2
-        logo_y = (qr_pixel_size - logo_h_px) // 2
+        draw = ImageDraw.Draw(qr_img)
+        box_w, box_h = logo_w + 16, logo_h + 16  # padding 8px on all sides
+        box_x = (qr_size - box_w) // 2
+        box_y = (qr_size - box_h) // 2
+        draw.rectangle([box_x, box_y, box_x + box_w, box_y + box_h], fill="white")
+
+        logo_x = (qr_size - logo_w) // 2
+        logo_y = (qr_size - logo_h) // 2
         qr_img.paste(logo_img, (logo_x, logo_y), logo_img)
 
-    # === Step 7: Paste logo perfectly centered in white frame ===
-    if logo_img:
-        logo_x = white_x0 + (padded_w - logo_w_px) // 2
-        logo_y = white_y0 + (padded_h - logo_h_px) // 2
-        qr_img.paste(logo_img, (logo_x, logo_y), logo_img)
-
-    # === Step 8: Add SN label below ===
+    # === 4. Add SN label below ===
     label = f"SN: {serial}"
     try:
         font = ImageFont.truetype("arialbd.ttf", 28)
     except:
         font = ImageFont.load_default()
 
-    dummy = Image.new("RGB", (1, 1))
-    draw_dummy = ImageDraw.Draw(dummy)
-    bbox = draw_dummy.textbbox((0, 0), label, font=font)
-    label_w = bbox[2] - bbox[0]
-    label_h = bbox[3] - bbox[1]
+    label_img = Image.new("RGB", (qr_size, 50), "white")
+    draw = ImageDraw.Draw(label_img)
+    text_w, text_h = draw.textsize(label, font=font)
+    draw.text(((qr_size - text_w) // 2, (50 - text_h) // 2), label, fill="black", font=font)
 
-    padding = 10
-    final_height = qr_pixel_size + label_h + padding * 2
-    final_img = Image.new("RGB", (qr_pixel_size, final_height), "white")
+    final_img = Image.new("RGB", (qr_size, qr_size + 50), "white")
     final_img.paste(qr_img, (0, 0))
+    final_img.paste(label_img, (0, qr_size))
 
-    draw = ImageDraw.Draw(final_img)
-    draw.text(((qr_pixel_size - label_w) // 2, qr_pixel_size + padding), label, fill="black", font=font)
-
+    # === 5. Save final image ===
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
     final_img.save(path)
 
