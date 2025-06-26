@@ -121,8 +121,11 @@ def generate_qr(serial):
             if matrix[y][x]:
                 draw.rectangle([px, py, px + box_size, py + box_size], fill="black")
 
-    # === Step 6: Debug box for centering check (optional)
-    draw.rectangle([white_x0, white_y0, white_x1, white_y1], outline="red", width=3)
+   # === Step 6: Paste logo perfectly centered in white frame ===
+    if logo_img:
+        logo_x = (qr_pixel_size - logo_w_px) // 2
+        logo_y = (qr_pixel_size - logo_h_px) // 2
+        qr_img.paste(logo_img, (logo_x, logo_y), logo_img)
 
     # === Step 7: Paste logo perfectly centered in white frame ===
     if logo_img:
