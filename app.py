@@ -78,7 +78,9 @@ def generate_qr(serial):
 
     dummy_img = Image.new("RGB", (1, 1))
     draw = ImageDraw.Draw(dummy_img)
-    text_width, text_height = draw.textsize(label, font=font)
+    bbox = draw.textbbox((0, 0), label, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
 
     padding = 10
     total_height = logo_height + qr_img.height + text_height + (padding * 3)
