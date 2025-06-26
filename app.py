@@ -58,7 +58,7 @@ from qrcode.constants import ERROR_CORRECT_H
 
 def generate_qr(serial):
     from qrcode.constants import ERROR_CORRECT_H
-    from PIL import Image, ImageDraw, ImageFont, ImageFilter
+    from PIL import Image, ImageDraw, ImageFont
     from io import BytesIO
     import requests
     import os
@@ -77,14 +77,14 @@ def generate_qr(serial):
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
     qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.NEAREST)
 
-    # === 2. Load and resize logo proportionally ===
+    # === 2. Load and resize logo (proportional + a bit bigger) ===
     logo_img = None
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-        max_logo_size = 70  # smaller logo
+        max_logo_size = 90  # increase size here
         ratio = min(max_logo_size / logo_img.width, max_logo_size / logo_img.height)
         new_size = (int(logo_img.width * ratio), int(logo_img.height * ratio))
         logo_img = logo_img.resize(new_size, Image.Resampling.LANCZOS)
@@ -92,29 +92,28 @@ def generate_qr(serial):
     except Exception as e:
         print("⚠️ Logo load failed:", e)
 
-    # === 3. Create rounded translucent white frame ===
+    # === 3. Create solid white frame with rounded corners ===
     if logo_img:
         frame_size = 120
         frame_radius = 20
-        frame = Image.new("RGBA", (frame_size, frame_size), (255, 255, 255, 0))
 
-        # Draw rounded rectangle (white background, slight transparency)
-        draw = ImageDraw.Draw(frame)
-        draw.rounded_rectangle(
+        frame = Image.new("RGBA", (frame_size, frame_size), (255, 255, 255, 255))
+        rounded_mask = Image.new("L", (frame_size, frame_size), 0)
+        draw_mask = ImageDraw.Draw(rounded_mask)
+        draw_mask.rounded_rectangle(
             [0, 0, frame_size, frame_size],
             radius=frame_radius,
-            fill=(255, 255, 255, 230)
+            fill=255
         )
 
-        # Optionally blur the background box a little
-        frame = frame.filter(ImageFilter.GaussianBlur(1.2))
+        frame.putalpha(rounded_mask)
 
-        # Paste frame centered on QR
+        # Composite white rounded box onto QR
         box_x = (qr_size - frame_size) // 2
         box_y = (qr_size - frame_size) // 2
         qr_img.alpha_composite(frame, dest=(box_x, box_y))
 
-        # Paste logo on top of frame
+        # Paste logo in center
         logo_x = (qr_size - logo_img.width) // 2
         logo_y = (qr_size - logo_img.height) // 2
         qr_img.alpha_composite(logo_img, dest=(logo_x, logo_y))
@@ -138,7 +137,7 @@ def generate_qr(serial):
     final_img.paste(qr_img, (0, 0), qr_img)
     final_img.paste(label_img, (0, qr_size), label_img)
 
-    # === 6. Save PNG ===
+    # === 6. Save to disk ===
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
     final_img.convert("RGB").save(path)
 
