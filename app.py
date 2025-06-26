@@ -50,28 +50,23 @@ def extract_data_from_pdf(pdf_path):
 
 def generate_qr(serial):
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
-    qr_img = qrcode.make(url).convert("RGB")  # Ensure compatibility
+    qr_img = qrcode.make(url).convert("RGB")
 
-    # Create label
     label = f"SN: {serial}"
     font = ImageFont.load_default()
 
-    # Get dimensions
     qr_width, qr_height = qr_img.size
-    text_width, text_height = font.getsize(label)
-    label_height = text_height + 5
-    total_height = qr_height + label_height
-
-    # Create new image with space for label
-    combined = Image.new("RGB", (qr_width, total_height), "white")
+    combined = Image.new("RGB", (qr_width, qr_height + 30), "white")
     combined.paste(qr_img, (0, 0))
 
-    # Draw text
     draw = ImageDraw.Draw(combined)
-    text_position = ((qr_width - text_width) // 2, qr_height + 2)
+    text_bbox = draw.textbbox((0, 0), label, font=font)
+    text_width = text_bbox[2] - text_bbox[0]
+    text_height = text_bbox[3] - text_bbox[1]
+    text_position = ((qr_width - text_width) // 2, qr_height + 5)
+
     draw.text(text_position, label, fill="black", font=font)
 
-    # Save image
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
     combined.save(path)
 
