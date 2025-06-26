@@ -54,7 +54,7 @@ def generate_qr(serial):
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     qr_img = qrcode.make(url).convert("RGB")
 
-    # === Add logo (optional) ===
+    # === Try loading logo (PNG with transparency) ===
     logo_img = None
     logo_height = 0
     try:
@@ -62,9 +62,12 @@ def generate_qr(serial):
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-        max_logo_width = qr_img.width
-        logo_ratio = max_logo_width / logo_img.width
-        logo_img = logo_img.resize((max_logo_width, int(logo_img.height * logo_ratio)))
+        # Resize logo to max 80% of QR width
+        max_logo_width = int(qr_img.width * 0.8)
+        if logo_img.width > max_logo_width:
+            scale = max_logo_width / logo_img.width
+            new_size = (max_logo_width, int(logo_img.height * scale))
+            logo_img = logo_img.resize(new_size, Image.ANTIALIAS)
         logo_height = logo_img.height
     except Exception as e:
         print("⚠️ Logo skipped:", e)
@@ -72,31 +75,39 @@ def generate_qr(serial):
     # === SN Label ===
     label = f"SN: {serial}"
     try:
-        font = ImageFont.truetype("arialbd.ttf", 22)
+        font = ImageFont.truetype("arialbd.ttf", 28)  # Bigger + Bold
     except:
         font = ImageFont.load_default()
 
+    # Calculate label height
     dummy_img = Image.new("RGB", (1, 1))
     draw = ImageDraw.Draw(dummy_img)
     bbox = draw.textbbox((0, 0), label, font=font)
     text_width = bbox[2] - bbox[0]
     text_height = bbox[3] - bbox[1]
 
-    padding = 10
+    # === Final combined image ===
+    padding = 15
     total_height = logo_height + qr_img.height + text_height + (padding * 3)
     final_img = Image.new("RGB", (qr_img.width, total_height), "white")
 
     y = padding
+
+    # Paste logo
     if logo_img:
-        final_img.paste(logo_img, (0, y))
+        logo_x = (qr_img.width - logo_img.width) // 2
+        final_img.paste(logo_img, (logo_x, y), mask=logo_img)
         y += logo_height + padding
 
+    # Paste QR
     final_img.paste(qr_img, (0, y))
     y += qr_img.height + padding
 
+    # Draw label
     draw = ImageDraw.Draw(final_img)
     draw.text(((qr_img.width - text_width) // 2, y), label, fill="black", font=font)
 
+    # Save to file
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
     final_img.save(path)
 
