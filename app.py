@@ -58,7 +58,7 @@ from qrcode.constants import ERROR_CORRECT_H
 
 def generate_qr(serial):
     from qrcode.constants import ERROR_CORRECT_H
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw, ImageFont, ImageFilter
     from io import BytesIO
     import requests
     import os
@@ -74,18 +74,17 @@ def generate_qr(serial):
     )
     qr.add_data(url)
     qr.make(fit=True)
-    qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+    qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
     qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.NEAREST)
 
-    # === 2. Load logo and resize proportionally ===
+    # === 2. Load and resize logo proportionally ===
     logo_img = None
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-        # Proportional resizing
-        max_logo_size = 80  # max width or height
+        max_logo_size = 70  # smaller logo
         ratio = min(max_logo_size / logo_img.width, max_logo_size / logo_img.height)
         new_size = (int(logo_img.width * ratio), int(logo_img.height * ratio))
         logo_img = logo_img.resize(new_size, Image.Resampling.LANCZOS)
@@ -93,23 +92,32 @@ def generate_qr(serial):
     except Exception as e:
         print("⚠️ Logo load failed:", e)
 
-    # === 3. Paste white box + logo centered ===
+    # === 3. Create rounded translucent white frame ===
     if logo_img:
-        draw = ImageDraw.Draw(qr_img)
+        frame_size = 120
+        frame_radius = 20
+        frame = Image.new("RGBA", (frame_size, frame_size), (255, 255, 255, 0))
 
-        # Fixed white frame
-        frame_size = 136  # total frame size (same as before)
-        frame_x = (qr_size - frame_size) // 2
-        frame_y = (qr_size - frame_size) // 2
-        draw.rectangle(
-            [frame_x, frame_y, frame_x + frame_size, frame_y + frame_size],
-            fill="white"
+        # Draw rounded rectangle (white background, slight transparency)
+        draw = ImageDraw.Draw(frame)
+        draw.rounded_rectangle(
+            [0, 0, frame_size, frame_size],
+            radius=frame_radius,
+            fill=(255, 255, 255, 230)
         )
 
-        # Center logo inside white frame
+        # Optionally blur the background box a little
+        frame = frame.filter(ImageFilter.GaussianBlur(1.2))
+
+        # Paste frame centered on QR
+        box_x = (qr_size - frame_size) // 2
+        box_y = (qr_size - frame_size) // 2
+        qr_img.alpha_composite(frame, dest=(box_x, box_y))
+
+        # Paste logo on top of frame
         logo_x = (qr_size - logo_img.width) // 2
         logo_y = (qr_size - logo_img.height) // 2
-        qr_img.paste(logo_img, (logo_x, logo_y), logo_img)
+        qr_img.alpha_composite(logo_img, dest=(logo_x, logo_y))
 
     # === 4. Add SN label below ===
     label = f"SN: {serial}"
@@ -118,20 +126,21 @@ def generate_qr(serial):
     except:
         font = ImageFont.load_default()
 
-    label_img = Image.new("RGB", (qr_size, 50), "white")
+    label_img = Image.new("RGBA", (qr_size, 50), "white")
     draw = ImageDraw.Draw(label_img)
     bbox = draw.textbbox((0, 0), label, font=font)
     text_w = bbox[2] - bbox[0]
     text_h = bbox[3] - bbox[1]
     draw.text(((qr_size - text_w) // 2, (50 - text_h) // 2), label, fill="black", font=font)
 
-    final_img = Image.new("RGB", (qr_size, qr_size + 50), "white")
-    final_img.paste(qr_img, (0, 0))
-    final_img.paste(label_img, (0, qr_size))
+    # === 5. Combine final image ===
+    final_img = Image.new("RGBA", (qr_size, qr_size + 50), "white")
+    final_img.paste(qr_img, (0, 0), qr_img)
+    final_img.paste(label_img, (0, qr_size), label_img)
 
-    # === 5. Save final image ===
+    # === 6. Save PNG ===
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
-    final_img.save(path)
+    final_img.convert("RGB").save(path)
 
     return url, path
 
