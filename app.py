@@ -49,62 +49,68 @@ def extract_data_from_pdf(pdf_path):
     lot = lot.group(1) if lot else "Unknown"
 
     return cert_num, model, serial, cal, exp, lot
+
 def generate_qr(serial):
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
-    qr_size = 500
+    canvas_size = 500  # Final square size
+    qr_size = 300      # QR code area
     qr_img = qrcode.make(url).convert("RGB").resize((qr_size, qr_size))
 
     # === Load logo from GitHub ===
     logo_img = None
-    logo_height = 0
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-        # Resize logo to 30% of QR width
-        max_logo_width = int(qr_size * 0.3)
-        scale = max_logo_width / logo_img.width
-        logo_img = logo_img.resize((max_logo_width, int(logo_img.height * scale)), Image.ANTIALIAS)
-        logo_height = logo_img.height
+        # Resize logo to 15% of QR width
+        logo_max_width = int(qr_size * 0.15)
+        scale = logo_max_width / logo_img.width
+        new_size = (logo_max_width, int(logo_img.height * scale))
+        logo_img = logo_img.resize(new_size, Image.ANTIALIAS)
     except Exception as e:
         print("⚠️ Logo load failed:", e)
 
     # === SN Label ===
     label = f"SN: {serial}"
     try:
-        font = ImageFont.truetype("arialbd.ttf", 38)  # Bold, large
+        font = ImageFont.truetype("arialbd.ttf", 20)
     except:
         font = ImageFont.load_default()
 
-    draw_dummy = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    dummy_img = Image.new("RGB", (1, 1))
+    draw_dummy = ImageDraw.Draw(dummy_img)
     bbox = draw_dummy.textbbox((0, 0), label, font=font)
     label_width = bbox[2] - bbox[0]
     label_height = bbox[3] - bbox[1]
 
-    # === Combine all ===
-    padding = 30
-    total_height = (logo_height if logo_img else 0) + qr_size + label_height + (padding * 3)
-    final_img = Image.new("RGB", (qr_size, total_height), "white")
+    # === Compose final square image ===
+    final_img = Image.new("RGB", (canvas_size, canvas_size), "white")
     draw = ImageDraw.Draw(final_img)
-    y = padding
 
+    current_y = 20
+
+    # === Logo (top center) ===
     if logo_img:
-        x = (qr_size - logo_img.width) // 2
-        final_img.paste(logo_img, (x, y), mask=logo_img)
-        y += logo_img.height + padding
+        lx = (canvas_size - logo_img.width) // 2
+        final_img.paste(logo_img, (lx, current_y), mask=logo_img)
+        current_y += logo_img.height + 10
+    else:
+        current_y += 40  # spacing if logo missing
 
-    final_img.paste(qr_img, (0, y))
-    y += qr_size + padding
+    # === QR Code (centered) ===
+    qx = (canvas_size - qr_size) // 2
+    final_img.paste(qr_img, (qx, current_y))
+    current_y += qr_size + 10
 
-    x = (qr_size - label_width) // 2
-    draw.text((x, y), label, fill="black", font=font)
+    # === SN Label (bottom) ===
+    tx = (canvas_size - label_width) // 2
+    draw.text((tx, current_y), label, fill="black", font=font)
 
     # === Save and return ===
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
     final_img.save(path)
     return url, path
-
 def connect_to_sheets():
     creds = st.secrets["google_service_account"]
     scopes = [
