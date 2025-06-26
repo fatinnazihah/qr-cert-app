@@ -77,32 +77,38 @@ def generate_qr(serial):
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
     qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.NEAREST)
 
-    # === 2. Load and shrink logo ===
+    # === 2. Load logo and resize proportionally ===
     logo_img = None
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-        # Smaller logo size
-        logo_target_w, logo_target_h = 80, 80  # shrink just the logo
-        logo_img = logo_img.resize((logo_target_w, logo_target_h), Image.Resampling.LANCZOS)
+        # Proportional resizing
+        max_logo_size = 80  # max width or height
+        ratio = min(max_logo_size / logo_img.width, max_logo_size / logo_img.height)
+        new_size = (int(logo_img.width * ratio), int(logo_img.height * ratio))
+        logo_img = logo_img.resize(new_size, Image.Resampling.LANCZOS)
+
     except Exception as e:
         print("⚠️ Logo load failed:", e)
 
-    # === 3. Paste white box (same size as before) + centered logo ===
+    # === 3. Paste white box + logo centered ===
     if logo_img:
         draw = ImageDraw.Draw(qr_img)
 
-        # Frame stays same size (like before)
-        frame_w, frame_h = 120 + 16, 120 + 16  # outer white box remains large
-        frame_x = (qr_size - frame_w) // 2
-        frame_y = (qr_size - frame_h) // 2
-        draw.rectangle([frame_x, frame_y, frame_x + frame_w, frame_y + frame_h], fill="white")
+        # Fixed white frame
+        frame_size = 136  # total frame size (same as before)
+        frame_x = (qr_size - frame_size) // 2
+        frame_y = (qr_size - frame_size) // 2
+        draw.rectangle(
+            [frame_x, frame_y, frame_x + frame_size, frame_y + frame_size],
+            fill="white"
+        )
 
-        # Center logo inside the frame
-        logo_x = (qr_size - logo_target_w) // 2
-        logo_y = (qr_size - logo_target_h) // 2
+        # Center logo inside white frame
+        logo_x = (qr_size - logo_img.width) // 2
+        logo_y = (qr_size - logo_img.height) // 2
         qr_img.paste(logo_img, (logo_x, logo_y), logo_img)
 
     # === 4. Add SN label below ===
