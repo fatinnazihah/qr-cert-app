@@ -57,12 +57,6 @@ from qrcode.constants import ERROR_CORRECT_H
 from qrcode.constants import ERROR_CORRECT_H
 
 def generate_qr(serial):
-    import qrcode
-    from qrcode.constants import ERROR_CORRECT_H
-    from PIL import Image, ImageDraw, ImageFont
-    from io import BytesIO
-    import requests
-
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     qr_size = 500
 
@@ -77,23 +71,32 @@ def generate_qr(serial):
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
     qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.NEAREST)
 
-    # === 2. Load logo (fixed 120x120px) ===
-    logo_w, logo_h = 120, 120
+    # === 2. Load logo (preserve aspect ratio, no stretch) ===
     logo_img = None
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
-        logo_img = logo_img.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
+
+        # Resize logo to fit max width while keeping aspect ratio
+        max_logo_w = 160
+        scale = max_logo_w / logo_img.width
+        new_w = int(logo_img.width * scale)
+        new_h = int(logo_img.height * scale)
+        logo_img = logo_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
     except Exception as e:
         print("⚠️ Logo load failed:", e)
 
-    # === 3. Paste white box + logo ===
+    # === 3. Draw white box and center logo ===
     if logo_img:
-        draw = ImageDraw.Draw(qr_img)
-        box_w, box_h = logo_w + 16, logo_h + 16  # padding 8px on all sides
+        logo_w, logo_h = logo_img.size
+        padding = 12
+        box_w, box_h = logo_w + padding * 2, logo_h + padding * 2
         box_x = (qr_size - box_w) // 2
         box_y = (qr_size - box_h) // 2
+
+        draw = ImageDraw.Draw(qr_img)
         draw.rectangle([box_x, box_y, box_x + box_w, box_y + box_h], fill="white")
 
         logo_x = (qr_size - logo_w) // 2
