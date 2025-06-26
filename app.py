@@ -48,10 +48,9 @@ def extract_data_from_pdf(pdf_path):
 
     return cert_num, model, serial, cal, exp, lot
 
-
 def generate_qr(serial):
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
-    qr_img = qrcode.make(url).convert("RGB")  # 🔥 Convert for compatibility
+    qr_img = qrcode.make(url).convert("RGB")  # Ensure compatibility
 
     # Create label
     label = f"SN: {serial}"
@@ -59,16 +58,16 @@ def generate_qr(serial):
 
     # Get dimensions
     qr_width, qr_height = qr_img.size
-    label_height = 20
+    text_width, text_height = font.getsize(label)
+    label_height = text_height + 5
     total_height = qr_height + label_height
 
     # Create new image with space for label
     combined = Image.new("RGB", (qr_width, total_height), "white")
-    combined.paste(qr_img, (0, 0))  # ✅ This will now work
+    combined.paste(qr_img, (0, 0))
 
     # Draw text
     draw = ImageDraw.Draw(combined)
-    text_width, _ = draw.textsize(label, font=font)
     text_position = ((qr_width - text_width) // 2, qr_height + 2)
     draw.text(text_position, label, fill="black", font=font)
 
