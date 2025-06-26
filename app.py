@@ -102,7 +102,7 @@ def generate_qr(serial):
 
     # Use bold font for SN
     try:
-        font_sn = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
+        font_sn = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40)
         font_co = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 25)
     except:
         font_sn = ImageFont.load_default()
