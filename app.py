@@ -52,63 +52,67 @@ def extract_data_from_pdf(pdf_path):
 
 def generate_qr(serial):
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
-    size = 500
-    qr = qrcode.make(url).convert("RGB").resize((size, size))
+    qr_size = 500
+    qr_img = qrcode.make(url).convert("RGB").resize((qr_size, qr_size))
 
-    # Load + resize logo
-    logo = None
+    # === Try to load logo ===
+    logo_img = None
+    logo_height = 0
     try:
-        resp = requests.get(
-            "https://cahayahornbill.com/wp-content/uploads/2024/10/cropped-LOGO-A-CHSB.png",
-            timeout=5
-        )
-        logo = Image.open(BytesIO(resp.content)).convert("RGBA")
-        max_w = int(size * 0.3)
-        ratio = max_w / logo.width
-        logo = logo.resize((max_w, int(logo.height * ratio)), Image.ANTIALIAS)
-    except Exception as e:
-        print("⚠️ Logo fetch failed:", e)
-        logo = None
+        logo_url = "https://cahayahornbill.com/wp-content/uploads/2024/10/cropped-LOGO-A-CHSB.png"
+        response = requests.get(logo_url, timeout=5)
+        logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-    # Prepare SN label
+        # Resize to max 30% width of QR
+        logo_max_width = int(qr_size * 0.3)
+        scale = logo_max_width / logo_img.width
+        new_size = (logo_max_width, int(logo_img.height * scale))
+        logo_img = logo_img.resize(new_size, Image.ANTIALIAS)
+        logo_height = logo_img.height
+    except Exception as e:
+        print("⚠️ Logo skipped:", e)
+
+    # === SN Label ===
     label = f"SN: {serial}"
     try:
-        font = ImageFont.truetype("arialbd.ttf", 40)  # Bold + bigger
+        font = ImageFont.truetype("arialbd.ttf", 38)
     except:
         font = ImageFont.load_default()
-    draw_temp = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-    bw, bh = draw_temp.textbbox((0, 0), label, font=font)[2:]
 
-    # Canvas setup
+    # Calculate label size
+    dummy = Image.new("RGB", (1, 1))
+    draw = ImageDraw.Draw(dummy)
+    bbox = draw.textbbox((0, 0), label, font=font)
+    label_width = bbox[2] - bbox[0]
+    label_height = bbox[3] - bbox[1]
+
+    # === Final image layout ===
     padding = 20
-    h_logo = logo.height if logo else 0
-    h_total = h_logo + size + bh + padding * 3
-    final = Image.new("RGB", (size, h_total), "white")
-    draw = ImageDraw.Draw(final)
+    canvas_height = (logo_height if logo_img else 0) + qr_size + label_height + padding * 4
+    final_img = Image.new("RGB", (qr_size, canvas_height), "white")
+    draw = ImageDraw.Draw(final_img)
 
     y = padding
 
-    # Center logo
-    if logo:
-        x_logo = (size - logo.width) // 2
-        final.paste(logo, (x_logo, y), logo)
-        y += logo.height + padding
+    # Logo (centered)
+    if logo_img:
+        x = (qr_size - logo_img.width) // 2
+        final_img.paste(logo_img, (x, y), mask=logo_img)
+        y += logo_height + padding
 
-    # Center QR
-    final.paste(qr, ((size - size) // 2, y))
-    y += size + padding
+    # QR code
+    final_img.paste(qr_img, (0, y))
+    y += qr_size + padding
 
-    # Center SN label
-    x_label = (size - bw) // 2
-    draw.text((x_label, y), label, fill="black", font=font)
+    # Label (centered)
+    x = (qr_size - label_width) // 2
+    draw.text((x, y), label, fill="black", font=font)
 
-    # Save
+    # Save image
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
-    final.save(path)
+    final_img.save(path)
 
     return url, path
-
-
 def connect_to_sheets():
     creds = st.secrets["google_service_account"]
     scopes = [
