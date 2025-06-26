@@ -47,11 +47,16 @@ def extract_data_from_pdf(pdf_path):
 
     return cert_num, model, serial, cal, exp, lot
 
-def generate_qr(serial):
-    url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
+def generate_qr(serial, cert, model, cal, exp, lot):
+    data_string = f"""Cert: {cert}
+Serial: {serial}
+Model: {model}
+Cal: {cal}
+Exp: {exp}
+Lot: {lot}"""
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
-    qrcode.make(url).save(path)
-    return url, path
+    qrcode.make(data_string).save(path)
+    return data_string, path
 
 def connect_to_sheets():
     creds = st.secrets["google_service_account"]
@@ -93,7 +98,7 @@ def upload_to_drive(filepath, serial, is_qr=False):
 # === UI ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
 st.title("📄 Certificate Extractor + QR Generator")
-st.write("Upload a PDF certificate to extract data, generate a QR code, upload to Google Drive, and sync with Google Sheets.")
+st.write("Upload a PDF certificate to extract data, embed it inside a QR code, upload to Google Drive, and sync with Google Sheets.")
 
 file = st.file_uploader("📄 Upload Certificate PDF", type=["pdf"])
 
@@ -112,9 +117,9 @@ if file:
     st.write(f"**Expiry Date:** {exp}")
     st.write(f"**Cylinder Lot #:** {lot}")
 
-    qr_link, qr_path = generate_qr(serial)
-    st.image(qr_path, caption="Generated QR", width=200)
-    st.write(f"[🔗 QR Link]({qr_link})")
+    qr_text, qr_path = generate_qr(serial, cert, model, cal, exp, lot)
+    st.image(qr_path, caption="Generated QR (Text Embedded)", width=200)
+    st.code(qr_text, language="text")
 
     pdf_url = upload_to_drive(TEMP_PDF, serial)
     qr_url = upload_to_drive(qr_path, serial, is_qr=True)
@@ -129,7 +134,7 @@ if file:
         serial_col = 2
         row = next((i for i, r in enumerate(data) if len(r) > serial_col and r[serial_col] == serial), None)
 
-        row_data = [cert, model, serial, cal, exp, lot, pdf_url, qr_url, qr_link]
+        row_data = [cert, model, serial, cal, exp, lot, pdf_url, qr_url, qr_text]
 
         if row is not None:
             sheet.update(f"A{row+1}:I{row+1}", [row_data])
