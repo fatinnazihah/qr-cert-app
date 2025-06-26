@@ -62,8 +62,8 @@ def generate_qr(serial):
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-        # Resize logo to max 80% of QR width
-        max_logo_width = int(qr_img.width * 0.8)
+        # Resize logo to 50% of QR width
+        max_logo_width = int(qr_img.width * 0.5)
         if logo_img.width > max_logo_width:
             scale = max_logo_width / logo_img.width
             new_size = (max_logo_width, int(logo_img.height * scale))
@@ -75,39 +75,43 @@ def generate_qr(serial):
     # === SN Label ===
     label = f"SN: {serial}"
     try:
-        font = ImageFont.truetype("arialbd.ttf", 28)  # Bigger + Bold
+        font = ImageFont.truetype("arialbd.ttf", 32)  # Big + Bold
     except:
         font = ImageFont.load_default()
 
-    # Calculate label height
+    # Measure label
     dummy_img = Image.new("RGB", (1, 1))
     draw = ImageDraw.Draw(dummy_img)
     bbox = draw.textbbox((0, 0), label, font=font)
     text_width = bbox[2] - bbox[0]
     text_height = bbox[3] - bbox[1]
 
-    # === Final combined image ===
-    padding = 15
-    total_height = logo_height + qr_img.height + text_height + (padding * 3)
-    final_img = Image.new("RGB", (qr_img.width, total_height), "white")
+    padding = 20
+    content_width = max(qr_img.width, text_width, logo_img.width if logo_img else 0)
+    total_height = logo_height + qr_img.height + text_height + (padding * 4)
+    canvas_size = max(content_width, total_height)  # Square canvas
+
+    final_img = Image.new("RGB", (canvas_size, canvas_size), "white")
+    draw = ImageDraw.Draw(final_img)
 
     y = padding
 
-    # Paste logo
+    # Center logo
     if logo_img:
-        logo_x = (qr_img.width - logo_img.width) // 2
-        final_img.paste(logo_img, (logo_x, y), mask=logo_img)
+        x = (canvas_size - logo_img.width) // 2
+        final_img.paste(logo_img, (x, y), mask=logo_img)
         y += logo_height + padding
 
-    # Paste QR
-    final_img.paste(qr_img, (0, y))
+    # Center QR
+    x = (canvas_size - qr_img.width) // 2
+    final_img.paste(qr_img, (x, y))
     y += qr_img.height + padding
 
-    # Draw label
-    draw = ImageDraw.Draw(final_img)
-    draw.text(((qr_img.width - text_width) // 2, y), label, fill="black", font=font)
+    # Center label
+    x = (canvas_size - text_width) // 2
+    draw.text((x, y), label, fill="black", font=font)
 
-    # Save to file
+    # Save
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
     final_img.save(path)
 
