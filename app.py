@@ -57,6 +57,12 @@ from qrcode.constants import ERROR_CORRECT_H
 from qrcode.constants import ERROR_CORRECT_H
 
 def generate_qr(serial):
+    from qrcode.constants import ERROR_CORRECT_H
+    from PIL import Image, ImageDraw, ImageFont
+    from io import BytesIO
+    import requests
+    import os
+
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     qr_size = 500
 
@@ -71,32 +77,31 @@ def generate_qr(serial):
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
     qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.NEAREST)
 
-    # === 2. Load logo (preserve aspect ratio, no stretch) ===
+    # === 2. Load and resize logo (smaller) ===
     logo_img = None
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-        # Resize logo to fit max width while keeping aspect ratio
-        max_logo_w = 160
+        # Resize with smaller scale
+        max_logo_w = 100  # smaller than before
         scale = max_logo_w / logo_img.width
-        new_w = int(logo_img.width * scale)
-        new_h = int(logo_img.height * scale)
-        logo_img = logo_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        logo_w = int(logo_img.width * scale)
+        logo_h = int(logo_img.height * scale)
+        logo_img = logo_img.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
 
     except Exception as e:
         print("⚠️ Logo load failed:", e)
 
-    # === 3. Draw white box and center logo ===
+    # === 3. Draw white frame + center logo ===
     if logo_img:
-        logo_w, logo_h = logo_img.size
-        padding = 12
+        draw = ImageDraw.Draw(qr_img)
+
+        padding = 8  # tighter frame
         box_w, box_h = logo_w + padding * 2, logo_h + padding * 2
         box_x = (qr_size - box_w) // 2
         box_y = (qr_size - box_h) // 2
-
-        draw = ImageDraw.Draw(qr_img)
         draw.rectangle([box_x, box_y, box_x + box_w, box_y + box_h], fill="white")
 
         logo_x = (qr_size - logo_w) // 2
@@ -106,7 +111,7 @@ def generate_qr(serial):
     # === 4. Add SN label below ===
     label = f"SN: {serial}"
     try:
-        font = ImageFont.truetype("arialbd.ttf", 28)
+        font = ImageFont.truetype("arialbd.ttf", 26)
     except:
         font = ImageFont.load_default()
 
