@@ -50,56 +50,66 @@ def extract_data_from_pdf(pdf_path):
 
     return cert_num, model, serial, cal, exp, lot
 
+import qrcode
+from qrcode.constants import ERROR_CORRECT_H
+
 def generate_qr(serial):
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     qr_size = 500
-    qr_img = qrcode.make(url).convert("RGB").resize((qr_size, qr_size))
 
-    # === Load + resize logo to 20% of QR size ===
+    # === Step 1: Generate QR with HIGH error correction ===
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=ERROR_CORRECT_H,  # Up to 30% can be covered
+        box_size=10,
+        border=4
+    )
+    qr.add_data(url)
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+    qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.LANCZOS)
+
+    # === Step 2: Load + resize logo ===
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-        logo_scale = 0.2  # 20%
+        # Resize logo to about 25% of QR size
+        logo_scale = 0.25
         logo_w = int(qr_size * logo_scale)
         scale = logo_w / logo_img.width
         logo_h = int(logo_img.height * scale)
         logo_img = logo_img.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
 
-        # Paste logo in center of QR
+        # Paste logo at center
         pos = ((qr_size - logo_w) // 2, (qr_size - logo_h) // 2)
         qr_img.paste(logo_img, pos, mask=logo_img)
 
     except Exception as e:
         print("⚠️ Logo load failed:", e)
 
-    # === Add SN label below ===
+    # === Step 3: Add SN label ===
     label = f"SN: {serial}"
     try:
-        font = ImageFont.truetype("arialbd.ttf", 24)
+        font = ImageFont.truetype("arialbd.ttf", 28)
     except:
         font = ImageFont.load_default()
 
     dummy = Image.new("RGB", (1, 1))
     draw_dummy = ImageDraw.Draw(dummy)
-    label_bbox = draw_dummy.textbbox((0, 0), label, font=font)
-    label_w = label_bbox[2] - label_bbox[0]
-    label_h = label_bbox[3] - label_bbox[1]
+    bbox = draw_dummy.textbbox((0, 0), label, font=font)
+    label_w = bbox[2] - bbox[0]
+    label_h = bbox[3] - bbox[1]
 
-    # Create final image with label
     padding = 10
     final_height = qr_size + label_h + padding * 2
     final_img = Image.new("RGB", (qr_size, final_height), "white")
-
-    # Paste QR
     final_img.paste(qr_img, (0, 0))
 
-    # Draw label centered
     draw = ImageDraw.Draw(final_img)
     draw.text(((qr_size - label_w) // 2, qr_size + padding), label, fill="black", font=font)
 
-    # Save
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
     final_img.save(path)
 
