@@ -52,67 +52,48 @@ def extract_data_from_pdf(pdf_path):
 
 def generate_qr(serial):
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
-    qr_img = qrcode.make(url).convert("RGB")
-    qr_size = 500
-    qr_img = qr_img.resize((qr_size, qr_size))
+    size = 500
+    qr = qrcode.make(url).convert("RGB").resize((size, size))
 
-    # === Try to load logo ===
-    logo_img = None
-    logo_height = 0
+    # Load logo (if possible)
+    logo = None
     try:
-        logo_url = "https://cahayahornbill.com/wp-content/uploads/2024/10/cropped-LOGO-A-CHSB.png"
-        response = requests.get(logo_url, timeout=5)
-        logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
+        resp = requests.get("https://cahayahornbill.com/.../LOGO-A-CHSB.png", timeout=5)
+        logo = Image.open(BytesIO(resp.content)).convert("RGBA")
+        max_w = int(size * 0.3)
+        if logo.width > max_w:
+            ratio = max_w/logo.width
+            logo = logo.resize((max_w, int(logo.height*ratio)), Image.ANTIALIAS)
+    except:
+        logo = None
 
-        logo_max_width = int(qr_size * 0.4)
-        scale = logo_max_width / logo_img.width
-        new_size = (logo_max_width, int(logo_img.height * scale))
-        logo_img = logo_img.resize(new_size, Image.ANTIALIAS)
-        logo_height = logo_img.height
-    except Exception as e:
-        print("⚠️ Logo skipped:", e)
-
-    # === Label ===
     label = f"SN: {serial}"
     try:
-        font = ImageFont.truetype("arialbd.ttf", 36)
+        font = ImageFont.truetype("arialbd.ttf", 40)
     except:
         font = ImageFont.load_default()
 
-    # Label sizing
-    dummy = Image.new("RGB", (1, 1))
-    draw = ImageDraw.Draw(dummy)
-    bbox = draw.textbbox((0, 0), label, font=font)
-    label_width = bbox[2] - bbox[0]
-    label_height = bbox[3] - bbox[1]
+    dummy = Image.new("RGB",(1,1)); d = ImageDraw.Draw(dummy)
+    bw, bh = d.textbbox((0,0), label, font=font)[2:]
 
-    # === Final image ===
-    padding = 30
-    total_height = (logo_height if logo_img else 0) + qr_size + label_height + padding * 3
-    final_img = Image.new("RGB", (qr_size, total_height), "white")
-    draw = ImageDraw.Draw(final_img)
+    padding = 20
+    h_total = (logo.height if logo else 0) + size + bh + padding*3
+    final = Image.new("RGB", (size, h_total), "white")
+    draw = ImageDraw.Draw(final)
 
     y = padding
+    if logo:
+        x = (size - logo.width)//2
+        final.paste(logo,(x,y),logo); y += logo.height + padding
 
-    # Logo
-    if logo_img:
-        x = (qr_size - logo_img.width) // 2
-        final_img.paste(logo_img, (x, y), mask=logo_img)
-        y += logo_img.height + padding
+    final.paste(qr, (0, y)); y += size + padding
 
-    # QR
-    final_img.paste(qr_img, (0, y))
-    y += qr_size + padding
-
-    # SN label
-    x = (qr_size - label_width) // 2
+    x = (size - bw)//2
     draw.text((x, y), label, fill="black", font=font)
 
-    # Save
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
-    final_img.save(path)
+    final.save(path); return url, path
 
-    return url, path
 
 def connect_to_sheets():
     creds = st.secrets["google_service_account"]
