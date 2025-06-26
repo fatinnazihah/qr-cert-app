@@ -6,3 +6,4 @@ PyMuPDF
 qrcode
 google-api-python-client
 pillow
+matplotlib
