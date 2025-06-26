@@ -52,17 +52,10 @@ def extract_data_from_pdf(pdf_path):
     return cert_num, model, serial, cal, exp, lot
 
 def generate_qr(serial):
-    from qrcode.constants import ERROR_CORRECT_H
-    from PIL import Image, ImageDraw, ImageFont
-    from io import BytesIO
-    import requests
-    import os
-    import matplotlib.font_manager as fm
-
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     qr_size = 500
 
-    # 1. Generate QR code
+    # Generate QR code
     qr = qrcode.QRCode(
         error_correction=ERROR_CORRECT_H,
         box_size=10,
@@ -73,7 +66,7 @@ def generate_qr(serial):
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
     qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.NEAREST)
 
-    # 2. Load & resize logo
+    # Load and resize logo
     logo_img = None
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
@@ -86,52 +79,46 @@ def generate_qr(serial):
     except:
         pass
 
-    # 3. White rounded frame & paste logo
     if logo_img:
         frame_size = 120
         frame_radius = 20
-
         frame = Image.new("RGBA", (frame_size, frame_size), (255, 255, 255, 255))
         mask = Image.new("L", (frame_size, frame_size), 0)
         ImageDraw.Draw(mask).rounded_rectangle([0, 0, frame_size, frame_size], radius=frame_radius, fill=255)
         frame.putalpha(mask)
 
-        box_x = (qr_size - frame_size) // 2
-        box_y = (qr_size - frame_size) // 2
-        qr_img.alpha_composite(frame, dest=(box_x, box_y))
+        box = ((qr_size - frame_size) // 2, (qr_size - frame_size) // 2)
+        qr_img.alpha_composite(frame, dest=box)
 
-        logo_x = (qr_size - logo_img.width) // 2
-        logo_y = (qr_size - logo_img.height) // 2
-        qr_img.alpha_composite(logo_img, dest=(logo_x, logo_y))
+        logo_pos = ((qr_size - logo_img.width) // 2, (qr_size - logo_img.height) // 2)
+        qr_img.alpha_composite(logo_img, dest=logo_pos)
 
-    # 4. Create text label area
+    # Add label
+    label_height = 160
     sn_text = f"SN: {serial}"
     company_text = "Cahaya Hornbill Sdn Bhd"
-    label_height = 160
-
     label_img = Image.new("RGBA", (qr_size, label_height), "white")
     draw = ImageDraw.Draw(label_img)
 
-    # Load guaranteed font
-    font_path = fm.findfont("DejaVu Sans")
-    font_sn = ImageFont.truetype(font_path, 48)
-    font_co = ImageFont.truetype(font_path, 25)
+    # Use bold font for SN
+    try:
+        font_sn = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
+        font_co = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 25)
+    except:
+        font_sn = ImageFont.load_default()
+        font_co = ImageFont.load_default()
 
-    # Draw SN (bold-like)
     sn_w, sn_h = draw.textbbox((0, 0), sn_text, font=font_sn)[2:]
     draw.text(((qr_size - sn_w) // 2, 10), sn_text, font=font_sn, fill="black")
 
-    # Draw company name
     co_w, co_h = draw.textbbox((0, 0), company_text, font=font_co)[2:]
     draw.text(((qr_size - co_w) // 2, sn_h + 30), company_text, font=font_co, fill="black")
 
-    # 5. Combine final image
     final_img = Image.new("RGBA", (qr_size, qr_size + label_height), "white")
     final_img.paste(qr_img, (0, 0), qr_img)
     final_img.paste(label_img, (0, qr_size), label_img)
 
-    # 6. Save
-    path = os.path.join("qrcodes", f"qr_{serial}.png")
+    path = os.path.join(QR_DIR, f"qr_{serial}.png")
     final_img.convert("RGB").save(path)
 
     return url, path
@@ -160,15 +147,13 @@ def upload_to_drive(filepath, serial, is_qr=False):
     media = MediaFileUpload(filepath, mimetype="image/png" if is_qr else "application/pdf")
     try:
         if found:
-            file_id = found[0]['id']
-            drive.files().update(fileId=file_id, media_body=media).execute()
+            drive.files().update(fileId=found[0]['id'], media_body=media).execute()
         else:
             meta = {"name": filename, "parents": [folder_id]}
             uploaded = drive.files().create(body=meta, media_body=media, fields="id").execute()
-            file_id = uploaded["id"]
+            return f"https://drive.google.com/file/d/{uploaded['id']}/view"
 
-        return f"https://drive.google.com/file/d/{file_id}/view"
-
+        return f"https://drive.google.com/file/d/{found[0]['id']}/view"
     except HttpError as err:
         st.error(f"\u26a0\ufe0f Drive upload failed: {err.resp.status} – {err._get_reason()}")
         return None
@@ -203,7 +188,7 @@ if file:
     qr_url = upload_to_drive(qr_path, serial, is_qr=True)
 
     if pdf_url: st.write(f"[📁 PDF Drive Link]({pdf_url})")
-    if qr_url: st.write(f"[🖼️ QR Image Link]({qr_url})")
+    if qr_url: st.write(f"[🗄️ QR Image Link]({qr_url})")
 
     try:
         st.info("🗓️ Updating Google Sheets...")
@@ -221,7 +206,7 @@ if file:
             sheet.append_row(row_data)
             st.success("✅ New row added to Google Sheets.")
 
-    except Exception as e:
+    except Exception:
         import traceback
         st.error("❌ Failed to update Google Sheets.")
         st.text(traceback.format_exc())
