@@ -53,27 +53,28 @@ def extract_data_from_pdf(pdf_path):
 def generate_qr(serial):
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     canvas_size = 500
-    qr_size = 360  # Slightly smaller QR for spacing
+    qr_size = 360
     qr_img = qrcode.make(url).convert("RGB").resize((qr_size, qr_size))
 
-    # === Load logo ===
+    # === Load logo from GitHub ===
     logo_img = None
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-        max_logo_height = int(canvas_size * 0.12)
-        scale = max_logo_height / logo_img.height
-        logo_new_width = int(logo_img.width * scale)
-        logo_img = logo_img.resize((logo_new_width, max_logo_height), Image.ANTIALIAS)
+        # Resize logo to 20% of QR size
+        max_logo_width = int(qr_size * 0.2)
+        scale = max_logo_width / logo_img.width
+        new_size = (max_logo_width, int(logo_img.height * scale))
+        logo_img = logo_img.resize(new_size, Image.ANTIALIAS)
     except Exception as e:
         print("⚠️ Logo load failed:", e)
 
     # === SN Label ===
     label = f"SN: {serial}"
     try:
-        font = ImageFont.truetype("arialbd.ttf", 20)
+        font = ImageFont.truetype("arialbd.ttf", 22)
     except:
         font = ImageFont.load_default()
 
@@ -83,27 +84,35 @@ def generate_qr(serial):
     label_width = label_bbox[2] - label_bbox[0]
     label_height = label_bbox[3] - label_bbox[1]
 
-    # === Compose final image ===
+    # === Create final image ===
     final_img = Image.new("RGB", (canvas_size, canvas_size), "white")
     draw = ImageDraw.Draw(final_img)
 
-    # Y position start
-    y = 20
+    # === Center everything vertically ===
+    spacing = 10
+    total_content_height = (
+        (logo_img.height if logo_img else 0) +
+        spacing +
+        qr_size +
+        spacing +
+        label_height
+    )
+    y = (canvas_size - total_content_height) // 2
 
-    # Logo
+    # Paste logo
     if logo_img:
         lx = (canvas_size - logo_img.width) // 2
         final_img.paste(logo_img, (lx, y), mask=logo_img)
-        y += logo_img.height + 10
+        y += logo_img.height + spacing
 
-    # SN label (above QR now)
-    label_x = (canvas_size - label_width) // 2
-    draw.text((label_x, y), label, fill="black", font=font)
-    y += label_height + 10
-
-    # QR code
+    # Paste QR
     qr_x = (canvas_size - qr_size) // 2
     final_img.paste(qr_img, (qr_x, y))
+    y += qr_size + spacing
+
+    # Draw SN label
+    label_x = (canvas_size - label_width) // 2
+    draw.text((label_x, y), label, fill="black", font=font)
 
     # Save
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
