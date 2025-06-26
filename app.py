@@ -114,8 +114,8 @@ def generate_qr(serial):
 
     # Load guaranteed font
     font_path = fm.findfont("DejaVu Sans")
-    font_sn = ImageFont.truetype(font_path, 60)
-    font_co = ImageFont.truetype(font_path, 48)
+    font_sn = ImageFont.truetype(font_path, 48)
+    font_co = ImageFont.truetype(font_path, 25)
 
     # Draw SN (bold-like)
     sn_w, sn_h = draw.textbbox((0, 0), sn_text, font=font_sn)[2:]
