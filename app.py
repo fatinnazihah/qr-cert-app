@@ -54,7 +54,7 @@ def generate_qr(serial):
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     qr_img = qrcode.make(url).convert("RGB")
 
-    # === Add logo (optional, above QR) ===
+    # === Add logo (optional) ===
     logo_img = None
     logo_height = 0
     try:
@@ -62,27 +62,24 @@ def generate_qr(serial):
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-        max_logo_width = qr_img.size[0]
+        max_logo_width = qr_img.width
         logo_ratio = max_logo_width / logo_img.width
         logo_img = logo_img.resize((max_logo_width, int(logo_img.height * logo_ratio)))
         logo_height = logo_img.height
     except Exception as e:
         print("⚠️ Logo skipped:", e)
-        logo_img = None
 
     # === SN Label ===
     label = f"SN: {serial}"
     try:
-        font = ImageFont.truetype("arialbd.ttf", 22)  # Bold + larger
+        font = ImageFont.truetype("arialbd.ttf", 22)
     except:
         font = ImageFont.load_default()
 
-    # Measure text
     dummy_img = Image.new("RGB", (1, 1))
     draw = ImageDraw.Draw(dummy_img)
     text_width, text_height = draw.textsize(label, font=font)
 
-    # === Final image ===
     padding = 10
     total_height = logo_height + qr_img.height + text_height + (padding * 3)
     final_img = Image.new("RGB", (qr_img.width, total_height), "white")
@@ -98,12 +95,10 @@ def generate_qr(serial):
     draw = ImageDraw.Draw(final_img)
     draw.text(((qr_img.width - text_width) // 2, y), label, fill="black", font=font)
 
-    # Save
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
     final_img.save(path)
 
     return url, path
-
 
 def connect_to_sheets():
     creds = st.secrets["google_service_account"]
