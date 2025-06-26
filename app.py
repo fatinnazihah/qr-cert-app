@@ -53,6 +53,8 @@ def extract_data_from_pdf(pdf_path):
 import qrcode
 from qrcode.constants import ERROR_CORRECT_H
 
+from qrcode.constants import ERROR_CORRECT_H
+
 def generate_qr(serial):
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     qr_size = 500
@@ -60,7 +62,7 @@ def generate_qr(serial):
     # === Step 1: Generate QR with HIGH error correction ===
     qr = qrcode.QRCode(
         version=1,
-        error_correction=ERROR_CORRECT_H,  # Up to 30% can be covered
+        error_correction=ERROR_CORRECT_H,  # Allows up to 30% area to be masked
         box_size=10,
         border=4
     )
@@ -69,27 +71,45 @@ def generate_qr(serial):
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
     qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.LANCZOS)
 
-    # === Step 2: Load + resize logo ===
+    draw = ImageDraw.Draw(qr_img)
+
+    # === Step 2: Draw white square at center ===
+    blank_scale = 0.3  # size of blank space relative to QR size
+    blank_size = int(qr_size * blank_scale)
+    half_blank = blank_size // 2
+    center = qr_size // 2
+    box_coords = (
+        center - half_blank,
+        center - half_blank,
+        center + half_blank,
+        center + half_blank
+    )
+    draw.rectangle(box_coords, fill="white")
+
+    # === Step 3: Load + paste transparent logo ===
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-        # Resize logo to about 25% of QR size
-        logo_scale = 0.25
-        logo_w = int(qr_size * logo_scale)
+        # Resize logo to 70% of blank space
+        logo_scale = 0.7
+        logo_w = int(blank_size * logo_scale)
         scale = logo_w / logo_img.width
         logo_h = int(logo_img.height * scale)
         logo_img = logo_img.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
 
-        # Paste logo at center
-        pos = ((qr_size - logo_w) // 2, (qr_size - logo_h) // 2)
-        qr_img.paste(logo_img, pos, mask=logo_img)
+        # Center logo in blank area
+        logo_pos = (
+            center - logo_w // 2,
+            center - logo_h // 2
+        )
+        qr_img.paste(logo_img, logo_pos, mask=logo_img)
 
     except Exception as e:
         print("⚠️ Logo load failed:", e)
 
-    # === Step 3: Add SN label ===
+    # === Step 4: Add SN label below ===
     label = f"SN: {serial}"
     try:
         font = ImageFont.truetype("arialbd.ttf", 28)
