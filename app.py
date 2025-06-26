@@ -62,7 +62,8 @@ def generate_qr(serial):
 
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     qr_size = 500
-    logo_width_scale = 0.3  # % of QR width (not a square anymore)
+    logo_width_scale = 0.3       # % of QR width (actual logo size)
+    frame_padding_ratio = 1.2    # white box = 120% of logo size
 
     # === Step 1: Generate QR Code matrix ===
     qr = qrcode.QRCode(
@@ -99,24 +100,28 @@ def generate_qr(serial):
     qr_img = Image.new("RGB", (qr_pixel_size, qr_pixel_size), "white")
     draw = ImageDraw.Draw(qr_img)
 
-    # === Step 4: Draw QR, skip center logo space ===
-    x_start = (qr_pixel_size - logo_w_px) // 2
-    y_start = (qr_pixel_size - logo_h_px) // 2
-    x_end = x_start + logo_w_px
-    y_end = y_start + logo_h_px
+    # === Step 4: Draw QR, skip larger padded area for white frame ===
+    padded_w = int(logo_w_px * frame_padding_ratio)
+    padded_h = int(logo_h_px * frame_padding_ratio)
+    x_start = (qr_pixel_size - padded_w) // 2
+    y_start = (qr_pixel_size - padded_h) // 2
+    x_end = x_start + padded_w
+    y_end = y_start + padded_h
 
     for y in range(len(matrix)):
         for x in range(len(matrix[y])):
             px = x * box_size
             py = y * box_size
             if x_start <= px < x_end and y_start <= py < y_end:
-                continue  # skip logo zone
+                continue  # skip padded zone
             if matrix[y][x]:
                 draw.rectangle([px, py, px + box_size, py + box_size], fill="black")
 
-    # === Step 5: Paste logo (perfect fit) ===
+    # === Step 5: Paste logo centered within white frame ===
     if logo_img:
-        qr_img.paste(logo_img, (x_start, y_start), logo_img)
+        logo_x = (qr_pixel_size - logo_w_px) // 2
+        logo_y = (qr_pixel_size - logo_h_px) // 2
+        qr_img.paste(logo_img, (logo_x, logo_y), logo_img)
 
     # === Step 6: Add SN label below ===
     label = f"SN: {serial}"
@@ -143,6 +148,7 @@ def generate_qr(serial):
     final_img.save(path)
 
     return url, path
+    
 def connect_to_sheets():
     creds = st.secrets["google_service_account"]
     scopes = [
