@@ -119,8 +119,8 @@ def generate_qr(serial):
 
     # === Step 5: Paste logo centered within white frame ===
     if logo_img:
-        logo_x = (qr_pixel_size - logo_w_px) // 2
-        logo_y = (qr_pixel_size - logo_h_px) // 2
+        logo_x = x_start + (padded_w - logo_w_px) // 2
+        logo_y = y_start + (padded_h - logo_h_px) // 2
         qr_img.paste(logo_img, (logo_x, logo_y), logo_img)
 
     # === Step 6: Add SN label below ===
