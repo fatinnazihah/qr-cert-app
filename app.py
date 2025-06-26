@@ -53,8 +53,7 @@ Serial: {serial}
 Model: {model}
 Cal: {cal}
 Exp: {exp}
-Lot: {lot}
-Link: https://qrcertificates-30ddb.web.app/?id={serial}"""
+Lot: {lot}"""
 
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
 
