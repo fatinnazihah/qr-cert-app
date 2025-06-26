@@ -57,48 +57,61 @@ from qrcode.constants import ERROR_CORRECT_H
 from qrcode.constants import ERROR_CORRECT_H
 
 def generate_qr(serial):
+    import qrcode
+    from qrcode.image.base import BaseImage
+
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     qr_size = 500
-    logo_scale = 0.3  # How big the white box and logo should be
+    logo_scale = 0.3  # 30% white center
 
-    # === Step 1: Generate QR matrix ===
+    # === Step 1: Generate QR Code and matrix ===
     qr = qrcode.QRCode(
-        version=None,  # Auto-fit size
+        version=None,
         error_correction=ERROR_CORRECT_H,
         box_size=10,
         border=4
     )
     qr.add_data(url)
     qr.make(fit=True)
-    qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
-    qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.LANCZOS)
+    matrix = qr.get_matrix()  # 2D list of booleans
 
-    # === Step 2: Create new canvas and draw white box ===
-    canvas = Image.new("RGB", (qr_size, qr_size), "white")
-    canvas.paste(qr_img)
+    box_size = qr_size // len(matrix)
+    qr_pixel_size = box_size * len(matrix)
 
-    draw = ImageDraw.Draw(canvas)
-    box_size = int(qr_size * logo_scale)
-    box_x0 = (qr_size - box_size) // 2
-    box_y0 = (qr_size - box_size) // 2
-    box_x1 = box_x0 + box_size
-    box_y1 = box_y0 + box_size
-    draw.rectangle([box_x0, box_y0, box_x1, box_y1], fill="white")
+    # === Step 2: Create blank canvas ===
+    qr_img = Image.new("RGB", (qr_pixel_size, qr_pixel_size), "white")
+    draw = ImageDraw.Draw(qr_img)
 
-    # === Step 3: Paste logo on top ===
+    # === Step 3: Draw each module except center ===
+    center_start = int(len(matrix) * (0.5 - logo_scale / 2))
+    center_end = int(len(matrix) * (0.5 + logo_scale / 2))
+
+    for y in range(len(matrix)):
+        for x in range(len(matrix[y])):
+            if center_start <= x < center_end and center_start <= y < center_end:
+                continue  # skip center area
+            if matrix[y][x]:
+                draw.rectangle(
+                    [x * box_size, y * box_size, (x + 1) * box_size, (y + 1) * box_size],
+                    fill="black"
+                )
+
+    # === Step 4: Paste logo in center ===
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-        # Resize logo to fit within white box
-        logo_img = logo_img.resize((box_size, box_size), Image.Resampling.LANCZOS)
-        canvas.paste(logo_img, (box_x0, box_y0), mask=logo_img)
+        logo_target_size = center_end - center_start
+        logo_px = logo_target_size * box_size
+        logo_img = logo_img.resize((logo_px, logo_px), Image.Resampling.LANCZOS)
+
+        qr_img.paste(logo_img, (center_start * box_size, center_start * box_size), logo_img)
 
     except Exception as e:
         print("⚠️ Logo load failed:", e)
 
-    # === Step 4: Add SN label below ===
+    # === Step 5: Add SN label ===
     label = f"SN: {serial}"
     try:
         font = ImageFont.truetype("arialbd.ttf", 28)
@@ -112,18 +125,17 @@ def generate_qr(serial):
     label_h = bbox[3] - bbox[1]
 
     padding = 10
-    final_height = qr_size + label_h + padding * 2
-    final_img = Image.new("RGB", (qr_size, final_height), "white")
-    final_img.paste(canvas, (0, 0))
+    final_height = qr_pixel_size + label_h + padding * 2
+    final_img = Image.new("RGB", (qr_pixel_size, final_height), "white")
+    final_img.paste(qr_img, (0, 0))
 
     draw = ImageDraw.Draw(final_img)
-    draw.text(((qr_size - label_w) // 2, qr_size + padding), label, fill="black", font=font)
+    draw.text(((qr_pixel_size - label_w) // 2, qr_pixel_size + padding), label, fill="black", font=font)
 
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
     final_img.save(path)
 
     return url, path
-    
 def connect_to_sheets():
     creds = st.secrets["google_service_account"]
     scopes = [
