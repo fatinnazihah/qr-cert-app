@@ -4,12 +4,14 @@ import fitz  # PyMuPDF
 import qrcode
 import streamlit as st
 import gspread
+import requests
+from io import BytesIO
+from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
-from PIL import Image, ImageDraw, ImageFont
 
 # === Config ===
 TEMP_PDF = "examplecert.pdf"
@@ -52,19 +54,38 @@ def generate_qr(serial):
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     qr_img = qrcode.make(url).convert("RGB")
 
+    # === Add logo ===
+    try:
+        logo_url = "https://cahayahornbill.com/wp-content/uploads/2024/10/cropped-LOGO-A-CHSB.png"
+        response = requests.get(logo_url)
+        logo = Image.open(BytesIO(response.content)).convert("RGBA")
+
+        # Resize logo
+        logo_size = qr_img.size[0] // 4
+        logo = logo.resize((logo_size, logo_size))
+        pos = ((qr_img.size[0] - logo_size) // 2, (qr_img.size[1] - logo_size) // 2)
+        qr_img.paste(logo, pos, mask=logo)
+    except Exception as e:
+        print("⚠️ Logo load failed:", e)
+
+    # === Add label ===
     label = f"SN: {serial}"
-    font = ImageFont.load_default()
+    try:
+        font = ImageFont.truetype("arialbd.ttf", 20)  # Bold, size 20
+    except:
+        font = ImageFont.load_default()
 
-    qr_width, qr_height = qr_img.size
-    combined = Image.new("RGB", (qr_width, qr_height + 30), "white")
-    combined.paste(qr_img, (0, 0))
-
-    draw = ImageDraw.Draw(combined)
+    draw = ImageDraw.Draw(qr_img)
     text_bbox = draw.textbbox((0, 0), label, font=font)
     text_width = text_bbox[2] - text_bbox[0]
     text_height = text_bbox[3] - text_bbox[1]
-    text_position = ((qr_width - text_width) // 2, qr_height + 5)
 
+    total_height = qr_img.size[1] + text_height + 10
+    combined = Image.new("RGB", (qr_img.size[0], total_height), "white")
+    combined.paste(qr_img, (0, 0))
+
+    draw = ImageDraw.Draw(combined)
+    text_position = ((qr_img.size[0] - text_width) // 2, qr_img.size[1] + 5)
     draw.text(text_position, label, fill="black", font=font)
 
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
