@@ -52,26 +52,25 @@ def extract_data_from_pdf(pdf_path):
 
 def generate_qr(serial):
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
-    canvas_size = 500  # Final square size
-    qr_size = 300      # QR code area
+    canvas_size = 500
+    qr_size = 400  # Larger QR code
     qr_img = qrcode.make(url).convert("RGB").resize((qr_size, qr_size))
 
-    # === Load logo from GitHub ===
+    # === Load logo ===
     logo_img = None
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-        # Resize logo to 15% of QR width
-        logo_max_width = int(qr_size * 0.15)
+        # Resize logo to 12% of canvas
+        logo_max_width = int(canvas_size * 0.12)
         scale = logo_max_width / logo_img.width
-        new_size = (logo_max_width, int(logo_img.height * scale))
-        logo_img = logo_img.resize(new_size, Image.ANTIALIAS)
+        logo_img = logo_img.resize((logo_max_width, int(logo_img.height * scale)), Image.ANTIALIAS)
     except Exception as e:
         print("⚠️ Logo load failed:", e)
 
-    # === SN Label ===
+    # === Label ===
     label = f"SN: {serial}"
     try:
         font = ImageFont.truetype("arialbd.ttf", 20)
@@ -84,33 +83,29 @@ def generate_qr(serial):
     label_width = bbox[2] - bbox[0]
     label_height = bbox[3] - bbox[1]
 
-    # === Compose final square image ===
+    # === Final canvas ===
     final_img = Image.new("RGB", (canvas_size, canvas_size), "white")
     draw = ImageDraw.Draw(final_img)
 
-    current_y = 20
-
-    # === Logo (top center) ===
+    y = 20
     if logo_img:
         lx = (canvas_size - logo_img.width) // 2
-        final_img.paste(logo_img, (lx, current_y), mask=logo_img)
-        current_y += logo_img.height + 10
+        final_img.paste(logo_img, (lx, y), mask=logo_img)
+        y += logo_img.height + 10
     else:
-        current_y += 40  # spacing if logo missing
+        y += 30
 
-    # === QR Code (centered) ===
     qx = (canvas_size - qr_size) // 2
-    final_img.paste(qr_img, (qx, current_y))
-    current_y += qr_size + 10
+    final_img.paste(qr_img, (qx, y))
+    y += qr_size + 10
 
-    # === SN Label (bottom) ===
     tx = (canvas_size - label_width) // 2
-    draw.text((tx, current_y), label, fill="black", font=font)
+    draw.text((tx, y), label, fill="black", font=font)
 
-    # === Save and return ===
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
     final_img.save(path)
     return url, path
+
 def connect_to_sheets():
     creds = st.secrets["google_service_account"]
     scopes = [
