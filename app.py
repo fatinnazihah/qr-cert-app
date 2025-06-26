@@ -52,40 +52,26 @@ def extract_data_from_pdf(pdf_path):
     return cert_num, model, serial, cal, exp, lot
 
 def generate_qr(serial):
-    from qrcode.constants import ERROR_CORRECT_H
-    from PIL import Image, ImageDraw, ImageFont
-    from io import BytesIO
-    import requests
-    import os
-
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     qr_size = 500
 
-    # 1. Generate QR code
-    qr = qrcode.QRCode(
-        error_correction=ERROR_CORRECT_H,
-        box_size=10,
-        border=4
-    )
+    qr = qrcode.QRCode(error_correction=ERROR_CORRECT_H, box_size=10, border=4)
     qr.add_data(url)
     qr.make(fit=True)
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
     qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.NEAREST)
 
-    # 2. Load & resize logo
     logo_img = None
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         resp = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(resp.content)).convert("RGBA")
-
         max_logo = 100
         ratio = min(max_logo / logo_img.width, max_logo / logo_img.height)
         logo_img = logo_img.resize((int(logo_img.width * ratio), int(logo_img.height * ratio)), Image.Resampling.LANCZOS)
     except:
         pass
 
-    # 3. White rounded frame & paste logo
     if logo_img:
         frame_size = 120
         frame_radius = 20
@@ -103,37 +89,39 @@ def generate_qr(serial):
         logo_y = (qr_size - logo_img.height) // 2
         qr_img.alpha_composite(logo_img, dest=(logo_x, logo_y))
 
-    # 4. Create text label area
     sn_text = f"SN: {serial}"
     company_text = "Cahaya Hornbill Sdn Bhd"
-    label_height = 220
+    label_height = 160
 
     label_img = Image.new("RGBA", (qr_size, label_height), "white")
     draw = ImageDraw.Draw(label_img)
 
-    # Load fonts
     try:
-        font_sn = ImageFont.truetype("arialbd.ttf", 100)  # bold
-        font_co = ImageFont.truetype("arial.ttf", 100)    # regular
+        from matplotlib import font_manager
+        default_font = font_manager.findfont("DejaVu Sans")
+        font_sn = ImageFont.truetype(default_font, 60)
+        font_co = ImageFont.truetype(default_font, 48)
     except:
         font_sn = ImageFont.load_default()
         font_co = ImageFont.load_default()
 
-    # Draw SN
-    sn_w, sn_h = draw.textbbox((0, 0), sn_text, font=font_sn)[2:]
-    draw.text(((qr_size - sn_w) // 2, 0), sn_text, font=font_sn, fill="black")
+    sn_bbox = draw.textbbox((0, 0), sn_text, font=font_sn)
+    sn_w, sn_h = sn_bbox[2] - sn_bbox[0], sn_bbox[3] - sn_bbox[1]
+    sn_x = (qr_size - sn_w) // 2
+    sn_y = 10
+    draw.text((sn_x, sn_y), sn_text, font=font_sn, fill="black")
 
-    # Draw company name
-    co_w, co_h = draw.textbbox((0, 0), company_text, font=font_co)[2:]
-    draw.text(((qr_size - co_w) // 2, sn_h + 10), company_text, font=font_co, fill="black")
+    co_bbox = draw.textbbox((0, 0), company_text, font=font_co)
+    co_w, co_h = co_bbox[2] - co_bbox[0], co_bbox[3] - co_bbox[1]
+    co_x = (qr_size - co_w) // 2
+    co_y = sn_y + sn_h + 10
+    draw.text((co_x, co_y), company_text, font=font_co, fill="black")
 
-    # 5. Combine
     final_img = Image.new("RGBA", (qr_size, qr_size + label_height), "white")
     final_img.paste(qr_img, (0, 0), qr_img)
     final_img.paste(label_img, (0, qr_size), label_img)
 
-    # 6. Save
-    path = os.path.join("qrcodes", f"qr_{serial}.png")
+    path = os.path.join(QR_DIR, f"qr_{serial}.png")
     final_img.convert("RGB").save(path)
 
     return url, path
@@ -172,7 +160,7 @@ def upload_to_drive(filepath, serial, is_qr=False):
         return f"https://drive.google.com/file/d/{file_id}/view"
 
     except HttpError as err:
-        st.error(f"⚠️ Drive upload failed: {err.resp.status} – {err._get_reason()}")
+        st.error(f"\u26a0\ufe0f Drive upload failed: {err.resp.status} – {err._get_reason()}")
         return None
 
 # === UI ===
@@ -208,7 +196,7 @@ if file:
     if qr_url: st.write(f"[🖼️ QR Image Link]({qr_url})")
 
     try:
-        st.info("📅 Updating Google Sheets...")
+        st.info("🗓️ Updating Google Sheets...")
         sheet = connect_to_sheets()
         data = sheet.get_all_values()
         serial_col = 2
