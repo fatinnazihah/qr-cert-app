@@ -87,7 +87,10 @@ def generate_qr(serial):
         response = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(response.content)).convert("RGBA")
 
-        # Set target logo width (e.g. 30% of QR width)
+        # 🧼 Trim transparent padding
+        logo_img = logo_img.crop(logo_img.getbbox())
+
+        # Resize logo
         logo_w_px = int(qr_pixel_size * logo_width_scale)
         scale = logo_w_px / logo_img.width
         logo_h_px = int(logo_img.height * scale)
@@ -118,13 +121,16 @@ def generate_qr(serial):
             if matrix[y][x]:
                 draw.rectangle([px, py, px + box_size, py + box_size], fill="black")
 
-    # === Step 6: Paste logo perfectly centered in white frame ===
+    # === Step 6: Debug box for centering check (optional)
+    draw.rectangle([white_x0, white_y0, white_x1, white_y1], outline="red", width=3)
+
+    # === Step 7: Paste logo perfectly centered in white frame ===
     if logo_img:
         logo_x = white_x0 + (padded_w - logo_w_px) // 2
-        logo_y = white_y0 + (padded_h - logo_h_px) // 2 + 6
+        logo_y = white_y0 + (padded_h - logo_h_px) // 2
         qr_img.paste(logo_img, (logo_x, logo_y), logo_img)
 
-    # === Step 7: Add SN label below ===
+    # === Step 8: Add SN label below ===
     label = f"SN: {serial}"
     try:
         font = ImageFont.truetype("arialbd.ttf", 28)
