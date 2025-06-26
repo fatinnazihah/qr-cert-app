@@ -61,7 +61,7 @@ def generate_qr(serial):
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     qr_size = 500
 
-    # 1. Generate QR
+    # 1. Generate QR code
     qr = qrcode.QRCode(
         error_correction=ERROR_CORRECT_H,
         box_size=10,
@@ -78,55 +78,64 @@ def generate_qr(serial):
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         resp = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(resp.content)).convert("RGBA")
+
         max_logo = 100
         ratio = min(max_logo / logo_img.width, max_logo / logo_img.height)
         logo_img = logo_img.resize((int(logo_img.width * ratio), int(logo_img.height * ratio)), Image.Resampling.LANCZOS)
     except:
         pass
 
-    # 3. White rounded frame & logo placement
+    # 3. White rounded frame & paste logo
     if logo_img:
-        frame = Image.new("RGBA", (120, 120), (255, 255, 255, 255))
-        mask = Image.new("L", (120, 120), 0)
-        ImageDraw.Draw(mask).rounded_rectangle([0,0,120,120], radius=20, fill=255)
+        frame_size = 120
+        frame_radius = 20
+
+        frame = Image.new("RGBA", (frame_size, frame_size), (255, 255, 255, 255))
+        mask = Image.new("L", (frame_size, frame_size), 0)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, frame_size, frame_size], radius=frame_radius, fill=255)
         frame.putalpha(mask)
 
-        box = ((qr_size - 120)//2, (qr_size - 120)//2)
-        qr_img.alpha_composite(frame, dest=box)
-        logo_box = ((qr_size - logo_img.width)//2, (qr_size - logo_img.height)//2)
-        qr_img.alpha_composite(logo_img, dest=logo_box)
+        box_x = (qr_size - frame_size) // 2
+        box_y = (qr_size - frame_size) // 2
+        qr_img.alpha_composite(frame, dest=(box_x, box_y))
 
-    # 4. Create label area
-    SN = f"SN: {serial}"
-    CO = "Cahaya Hornbill Sdn Bhd"
-    label_h = 90
-    lbl = Image.new("RGBA", (qr_size, label_h), "white")
-    draw = ImageDraw.Draw(lbl)
+        logo_x = (qr_size - logo_img.width) // 2
+        logo_y = (qr_size - logo_img.height) // 2
+        qr_img.alpha_composite(logo_img, dest=(logo_x, logo_y))
 
-    # fonts
+    # 4. Create text label area
+    sn_text = f"SN: {serial}"
+    company_text = "Cahaya Hornbill Sdn Bhd"
+    label_height = 220
+
+    label_img = Image.new("RGBA", (qr_size, label_height), "white")
+    draw = ImageDraw.Draw(label_img)
+
+    # Load fonts
     try:
-        f_sn = ImageFont.truetype("arialbd.ttf", 36)
-        f_co = ImageFont.truetype("ariali.ttf", 26)
+        font_sn = ImageFont.truetype("arialbd.ttf", 100)  # bold
+        font_co = ImageFont.truetype("arial.ttf", 100)    # regular
     except:
-        f_sn = ImageFont.load_default()
-        f_co = ImageFont.load_default()
+        font_sn = ImageFont.load_default()
+        font_co = ImageFont.load_default()
 
-    # divider
-    divider_y = 45
-    draw.line([(50, divider_y), (qr_size-50, divider_y)], fill="#2E7D32", width=2)
+    # Draw SN
+    sn_w, sn_h = draw.textbbox((0, 0), sn_text, font=font_sn)[2:]
+    draw.text(((qr_size - sn_w) // 2, 0), sn_text, font=font_sn, fill="black")
 
-    # text
-    w1, h1 = draw.textbbox((0,0), SN, font=f_sn)[2:4]
-    draw.text(((qr_size - w1)//2, 5), SN, fill="#1B5E20", font=f_sn)
-    w2, h2 = draw.textbbox((0,0), CO, font=f_co)[2:4]
-    draw.text(((qr_size - w2)//2, divider_y + 5), CO, fill="black", font=f_co)
+    # Draw company name
+    co_w, co_h = draw.textbbox((0, 0), company_text, font=font_co)[2:]
+    draw.text(((qr_size - co_w) // 2, sn_h + 10), company_text, font=font_co, fill="black")
 
-    # 5. Combine and save
-    final = Image.new("RGBA", (qr_size, qr_size + label_h), "white")
-    final.paste(qr_img, (0,0), qr_img)
-    final.paste(lbl, (0, qr_size), lbl)
+    # 5. Combine
+    final_img = Image.new("RGBA", (qr_size, qr_size + label_height), "white")
+    final_img.paste(qr_img, (0, 0), qr_img)
+    final_img.paste(label_img, (0, qr_size), label_img)
+
+    # 6. Save
     path = os.path.join("qrcodes", f"qr_{serial}.png")
-    final.convert("RGB").save(path)
+    final_img.convert("RGB").save(path)
+
     return url, path
 
 def connect_to_sheets():
