@@ -100,30 +100,31 @@ def generate_qr(serial):
     qr_img = Image.new("RGB", (qr_pixel_size, qr_pixel_size), "white")
     draw = ImageDraw.Draw(qr_img)
 
-    # === Step 4: Draw QR, skip larger padded area for white frame ===
+    # === Step 4: Define padded white box (in pixels) ===
     padded_w = int(logo_w_px * frame_padding_ratio)
     padded_h = int(logo_h_px * frame_padding_ratio)
-    x_start = (qr_pixel_size - padded_w) // 2
-    y_start = (qr_pixel_size - padded_h) // 2
-    x_end = x_start + padded_w
-    y_end = y_start + padded_h
+    white_x0 = (qr_pixel_size - padded_w) // 2
+    white_y0 = (qr_pixel_size - padded_h) // 2
+    white_x1 = white_x0 + padded_w
+    white_y1 = white_y0 + padded_h
 
+    # === Step 5: Draw QR, skipping the white frame area ===
     for y in range(len(matrix)):
         for x in range(len(matrix[y])):
             px = x * box_size
             py = y * box_size
-            if x_start <= px < x_end and y_start <= py < y_end:
-                continue  # skip padded zone
+            if white_x0 <= px < white_x1 and white_y0 <= py < white_y1:
+                continue  # skip logo area
             if matrix[y][x]:
                 draw.rectangle([px, py, px + box_size, py + box_size], fill="black")
 
-    # === Step 5: Paste logo centered within white frame ===
+    # === Step 6: Paste logo perfectly centered in white frame ===
     if logo_img:
-        logo_x = x_start + (padded_w - logo_w_px) // 2
-        logo_y = y_start + (padded_h - logo_h_px) // 2
+        logo_x = white_x0 + (padded_w - logo_w_px) // 2
+        logo_y = white_y0 + (padded_h - logo_h_px) // 2
         qr_img.paste(logo_img, (logo_x, logo_y), logo_img)
 
-    # === Step 6: Add SN label below ===
+    # === Step 7: Add SN label below ===
     label = f"SN: {serial}"
     try:
         font = ImageFont.truetype("arialbd.ttf", 28)
