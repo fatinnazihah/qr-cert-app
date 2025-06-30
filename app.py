@@ -221,9 +221,19 @@ if uploaded_files:
 
                 row = next((r for r in existing if len(r) > serial_col and r[serial_col] == serial), None)
                 if row:
-                    st.info(f"ℹ️ {serial} already exists in sheet.")
-                    continue
-
+                    st.info(f"ℹ️ {serial} already exists in sheet. Data in sheet:")
+                
+                    # Reconstruct the links from the sheet if needed
+                    sheet_row = existing[existing.index(row)]
+                    pdf_url = sheet_row[6] if len(sheet_row) > 6 else "N/A"
+                    qr_url = sheet_row[7] if len(sheet_row) > 7 else "N/A"
+                    qr_link = sheet_row[8] if len(sheet_row) > 8 else f"https://qrcertificates-30ddb.web.app/?id={serial}"
+                else:
+                    qr_link, qr_path = generate_qr(serial)
+                    pdf_url = upload_to_drive(temp_path, serial)
+                    qr_url = upload_to_drive(qr_path, serial, is_qr=True)
+                    sheet.append_row([cert, model, serial, cal, exp, lot, pdf_url, qr_url, qr_link])
+                
                 qr_link, qr_path = generate_qr(serial)
                 pdf_url = upload_to_drive(temp_path, serial)
                 qr_url = upload_to_drive(qr_path, serial, is_qr=True)
