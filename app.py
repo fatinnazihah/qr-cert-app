@@ -89,17 +89,39 @@ def extract_template_type(text):
         return "unknown"
 
 def extract_gas_detector(text, lines):
-    cert = re.search(r"\d{1,3}/\d{1,3}/\d{4}\.SRV", text)
-    serial = re.search(r"\b\d{7}-\d{3}\b", text)
-    cert = cert.group(0) if cert else "Unknown"
-    serial = serial.group(0) if serial else "Unknown"
-    model = lines[lines.index(cert) + 2] if cert in lines else "Unknown"
+    # Extract certificate number
+    cert_match = re.search(r"\d{1,3}/\d{1,3}/\d{4}\.SRV", text)
+    cert = cert_match.group(0) if cert_match else "Unknown"
+
+    # Extract serial number
+    serial_match = re.search(r"\b\d{7}-\d{3}\b", text)
+    serial = serial_match.group(0) if serial_match else "Unknown"
+
+    # Extract model from the line before "Serial Number"
+    model = "Unknown"
+    for i, line in enumerate(lines):
+        if "Serial Number" in line and i > 0:
+            model = lines[i - 1].strip()
+            break
+
+    # Extract dates (first two valid dates)
     date_lines = [l for l in lines if re.match(r"^[A-Z][a-z]+ \d{1,2}, \d{4}$", l)]
     cal = format_date(date_lines[0]) if len(date_lines) > 0 else "Invalid"
     exp = format_date(date_lines[1]) if len(date_lines) > 1 else "Invalid"
-    lot = re.search(r"Cylinder Lot#\s*(\d+)", text)
-    lot = lot.group(1) if lot else "Unknown"
-    return [{"cert": cert, "model": model, "serial": serial, "cal": cal, "exp": exp, "lot": lot}]
+
+    # Extract Cylinder Lot#
+    lot_match = re.search(r"Cylinder Lot#\s*(\d+)", text)
+    lot = lot_match.group(1) if lot_match else "Unknown"
+
+    return [{
+        "cert": cert,
+        "model": model,
+        "serial": serial,
+        "cal": cal,
+        "exp": exp,
+        "lot": lot
+    }]
+
 
 def extract_eebd(text, lines):
     # Certificate number
