@@ -80,48 +80,40 @@ def generate_qr(serial):
     final_img.convert("RGB").save(path)
     return url, path
 
-def extract_template_type(text):
-    if "EEBD Refil" in text:
+def extract_template_type(text, lines):
+    # Lowercase everything for comparison
+    joined_text = text.lower()
+    lower_lines = [l.lower() for l in lines]
+
+    # EEBD detection: match either "EEBD Refill" or "Spiroscape"
+    if any("eebd refil" in l or "spiroscape" in l or "interspiro" in l for l in lower_lines):
         return "eebd"
-    elif "Certificate of Calibration" in text:
+
+    # Gas detector detection: match "gas detector", "radius bz1", or "certificate of calibration"
+    if any("radius bz1" in l or "gas detector" in l or "certificate of calibration" in l for l in lower_lines):
         return "gas_detector"
-    else:
-        return "unknown"
+
+    return "unknown"
 
 def extract_gas_detector(text, lines):
-    # Extract certificate number
-    cert_match = re.search(r"\d{1,3}/\d{1,3}/\d{4}\.SRV", text)
-    cert = cert_match.group(0) if cert_match else "Unknown"
+    doc = fitz.open(pdf_path)
+    text = "".join([page.get_text() for page in doc])
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
 
-    # Extract serial number
-    serial_match = re.search(r"\b\d{7}-\d{3}\b", text)
-    serial = serial_match.group(0) if serial_match else "Unknown"
+    cert_num = re.search(r"\d{1,3}/\d{1,3}/\d{4}\.SRV", text)
+    serial = re.search(r"\b\d{7}-\d{3}\b", text)
+    cert_num = cert_num.group(0) if cert_num else "Unknown"
+    serial = serial.group(0) if serial else "Unknown"
 
-    # Extract model from the line before "Serial Number"
-    model = "Unknown"
-    for i, line in enumerate(lines):
-        if "Serial Number" in line and i > 0:
-            model = lines[i - 1].strip()
-            break
-
-    # Extract dates (first two valid dates)
+    model = lines[lines.index(cert_num) + 2] if cert_num in lines else "Unknown"
     date_lines = [l for l in lines if re.match(r"^[A-Z][a-z]+ \d{1,2}, \d{4}$", l)]
     cal = format_date(date_lines[0]) if len(date_lines) > 0 else "Invalid"
     exp = format_date(date_lines[1]) if len(date_lines) > 1 else "Invalid"
 
-    # Extract Cylinder Lot#
-    lot_match = re.search(r"Cylinder Lot#\s*(\d+)", text)
-    lot = lot_match.group(1) if lot_match else "Unknown"
+    lot = re.search(r"Cylinder Lot#\s*(\d+)", text)
+    lot = lot.group(1) if lot else "Unknown"
 
-    return [{
-        "cert": cert,
-        "model": model,
-        "serial": serial,
-        "cal": cal,
-        "exp": exp,
-        "lot": lot
-    }]
-
+    return cert_num, model, serial, cal, exp, lot
 
 def extract_eebd(text, lines):
     # Certificate number
@@ -154,7 +146,7 @@ def extract_from_pdf(path):
     doc = fitz.open(path)
     text = "".join([page.get_text() for page in doc])
     lines = [line.strip() for line in text.splitlines() if line.strip()]
-    template = extract_template_type(text)
+    template = extract_template_type(text, lines)
 
     if template == "gas_detector":
         return extract_gas_detector(text, lines)
