@@ -180,8 +180,28 @@ if uploaded_files:
             pdf_url = upload_to_drive(temp_path, serial)
             qr_url = upload_to_drive(qr_path, serial, is_qr=True)
 
-            if pdf_url: st.write(f"[📁 PDF Drive Link]({pdf_url})")
-            if qr_url: st.write(f"[🗄️ QR Image Link]({qr_url})")
+            table_html = f"""
+            <table style='width:100%; border:1px solid #ccc; border-collapse:collapse;'>
+              <tr style='background-color:#f2f2f2;'>
+                <th style='padding:8px; border:1px solid #ccc;'>Type</th>
+                <th style='padding:8px; border:1px solid #ccc;'>Link</th>
+              </tr>
+              <tr>
+                <td style='padding:8px; border:1px solid #ccc;'>PDF</td>
+                <td style='padding:8px; border:1px solid #ccc;'><a href='{pdf_url}' target='_blank'>📁 View PDF</a></td>
+              </tr>
+              <tr>
+                <td style='padding:8px; border:1px solid #ccc;'>QR Image</td>
+                <td style='padding:8px; border:1px solid #ccc;'><a href='{qr_url}' target='_blank'>🗄️ View QR Image</a></td>
+              </tr>
+              <tr>
+                <td style='padding:8px; border:1px solid #ccc;'>QR Link</td>
+                <td style='padding:8px; border:1px solid #ccc;'><a href='{qr_link}' target='_blank'>🔗 QR Web Link</a></td>
+              </tr>
+            </table>
+            """
+            st.markdown(table_html, unsafe_allow_html=True)
+
 
             row = next((i for i, r in enumerate(data) if len(r) > serial_col and r[serial_col] == serial), None)
             row_data = [cert, model, serial, cal, exp, lot, pdf_url, qr_url, qr_link]
