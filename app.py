@@ -77,7 +77,7 @@ def generate_qr(serial):
         qr_img.alpha_composite(frame, ((qr_size - frame_size) // 2, (qr_size - frame_size) // 2))
         qr_img.alpha_composite(logo_img, ((qr_size - logo_img.width) // 2, (qr_size - logo_img.height) // 2))
     except:
-        pass  # Logo is optional
+        pass
 
     label_height = 160
     label_img = Image.new("RGBA", (qr_size, label_height), "white")
@@ -170,6 +170,13 @@ if uploaded_files:
 
         try:
             cert, model, serial, cal, exp, lot = extract_data_from_pdf(temp_path)
+
+            if any(x in ["Unknown", "Invalid Date", "Invalid"] for x in [cert, model, serial, cal, exp, lot]):
+                st.error("❌ This document is invalid. Required fields could not be extracted.")
+                st.write(f"**Extracted Data:** Cert: `{cert}`, Model: `{model}`, SN: `{serial}`, Cal: `{cal}`, Exp: `{exp}`, Lot: `{lot}`")
+                failed_files.append(file.name + " (invalid fields)")
+                continue
+
             st.success("✅ Data Extracted")
             st.write(f"**Certificate No:** {cert}")
             st.write(f"**Model:** {model}")
@@ -192,7 +199,7 @@ if uploaded_files:
                 qr_url = upload_to_drive(qr_path, serial, is_qr=True)
                 row_data += [pdf_url, qr_url, qr_link]
                 sheet.append_row(row_data)
-                st.success("🆕 New row added to Google Sheets.")
+                st.success("\U0001f195 New row added to Google Sheets.")
 
             st.image(f"qrcodes/qr_{serial}.png", caption="Generated QR", width=200)
             st.table({
@@ -205,7 +212,7 @@ if uploaded_files:
         except Exception as e:
             st.error(f"❌ Failed to process {file.name}")
             st.text(str(e))
-            failed_files.append(file.name)
+            failed_files.append(file.name + " (exception)")
 
         try:
             os.remove(temp_path)
@@ -221,6 +228,7 @@ if uploaded_files:
 
     if failed_files:
         st.markdown("## ❌ Failed Files")
-        st.code("\n".join(failed_files))
+        for fail in failed_files:
+            st.markdown(f"- ❌ **{fail}**")
 
     st.success("🎉 All files processed!")
