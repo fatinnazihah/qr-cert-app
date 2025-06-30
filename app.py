@@ -19,11 +19,11 @@ TEMP_PDF = "examplecert.pdf"
 QR_DIR = "qrcodes"
 os.makedirs(QR_DIR, exist_ok=True)
 
-# === Helpers ===
+# === Utilities ===
 def format_date(date_str):
     try:
         return datetime.strptime(date_str, "%B %d, %Y").strftime("%Y-%m-%d")
-    except:
+    except Exception:
         return "Invalid Date"
 
 def extract_data_from_pdf(pdf_path):
@@ -33,15 +33,10 @@ def extract_data_from_pdf(pdf_path):
 
     cert_num = re.search(r"\d{1,3}/\d{1,3}/\d{4}\.SRV", text)
     serial = re.search(r"\b\d{7}-\d{3}\b", text)
-
     cert_num = cert_num.group(0) if cert_num else "Unknown"
     serial = serial.group(0) if serial else "Unknown"
 
-    try:
-        model = lines[lines.index(cert_num) + 2]
-    except:
-        model = "Unknown"
-
+    model = lines[lines.index(cert_num) + 2] if cert_num in lines else "Unknown"
     date_lines = [l for l in lines if re.match(r"^[A-Z][a-z]+ \d{1,2}, \d{4}$", l)]
     cal = format_date(date_lines[0]) if len(date_lines) > 0 else "Invalid"
     exp = format_date(date_lines[1]) if len(date_lines) > 1 else "Invalid"
@@ -55,64 +50,49 @@ def generate_qr(serial):
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     qr_size = 500
 
-    # Generate QR code
-    qr = qrcode.QRCode(
-        error_correction=ERROR_CORRECT_H,
-        box_size=10,
-        border=4
-    )
+    qr = qrcode.QRCode(error_correction=ERROR_CORRECT_H, box_size=10, border=4)
     qr.add_data(url)
     qr.make(fit=True)
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
     qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.NEAREST)
 
-    # Load and resize logo
-    logo_img = None
+    # Insert logo
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         resp = requests.get(logo_url, timeout=5)
         logo_img = Image.open(BytesIO(resp.content)).convert("RGBA")
+        logo_img.thumbnail((100, 100), Image.Resampling.LANCZOS)
 
-        max_logo = 100
-        ratio = min(max_logo / logo_img.width, max_logo / logo_img.height)
-        logo_img = logo_img.resize((int(logo_img.width * ratio), int(logo_img.height * ratio)), Image.Resampling.LANCZOS)
-    except:
-        pass
-
-    if logo_img:
         frame_size = 120
-        frame_radius = 20
         frame = Image.new("RGBA", (frame_size, frame_size), (255, 255, 255, 255))
         mask = Image.new("L", (frame_size, frame_size), 0)
-        ImageDraw.Draw(mask).rounded_rectangle([0, 0, frame_size, frame_size], radius=frame_radius, fill=255)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, frame_size, frame_size], radius=20, fill=255)
         frame.putalpha(mask)
 
-        box = ((qr_size - frame_size) // 2, (qr_size - frame_size) // 2)
-        qr_img.alpha_composite(frame, dest=box)
+        qr_img.alpha_composite(frame, ((qr_size - frame_size) // 2, (qr_size - frame_size) // 2))
+        qr_img.alpha_composite(logo_img, ((qr_size - logo_img.width) // 2, (qr_size - logo_img.height) // 2))
 
-        logo_pos = ((qr_size - logo_img.width) // 2, (qr_size - logo_img.height) // 2)
-        qr_img.alpha_composite(logo_img, dest=logo_pos)
+    except Exception:
+        pass  # Logo optional
 
     # Add label
     label_height = 160
-    sn_text = f"SN: {serial}"
-    company_text = "Cahaya Hornbill Sdn Bhd"
     label_img = Image.new("RGBA", (qr_size, label_height), "white")
     draw = ImageDraw.Draw(label_img)
 
-    # Use bold font for SN
     try:
         font_sn = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40)
         font_co = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 25)
     except:
-        font_sn = ImageFont.load_default()
-        font_co = ImageFont.load_default()
+        font_sn = font_co = ImageFont.load_default()
 
+    sn_text = f"SN: {serial}"
+    co_text = "Cahaya Hornbill Sdn Bhd"
     sn_w, sn_h = draw.textbbox((0, 0), sn_text, font=font_sn)[2:]
-    draw.text(((qr_size - sn_w) // 2, 10), sn_text, font=font_sn, fill="black")
+    co_w, co_h = draw.textbbox((0, 0), co_text, font=font_co)[2:]
 
-    co_w, co_h = draw.textbbox((0, 0), company_text, font=font_co)[2:]
-    draw.text(((qr_size - co_w) // 2, sn_h + 30), company_text, font=font_co, fill="black")
+    draw.text(((qr_size - sn_w) // 2, 10), sn_text, font=font_sn, fill="black")
+    draw.text(((qr_size - co_w) // 2, sn_h + 30), co_text, font=font_co, fill="black")
 
     final_img = Image.new("RGBA", (qr_size, qr_size + label_height), "white")
     final_img.paste(qr_img, (0, 0), qr_img)
@@ -145,20 +125,20 @@ def upload_to_drive(filepath, serial, is_qr=False):
     found = drive.files().list(q=query, spaces='drive', fields='files(id)').execute().get('files', [])
 
     media = MediaFileUpload(filepath, mimetype="image/png" if is_qr else "application/pdf")
+
     try:
         if found:
             drive.files().update(fileId=found[0]['id'], media_body=media).execute()
+            return f"https://drive.google.com/file/d/{found[0]['id']}/view"
         else:
             meta = {"name": filename, "parents": [folder_id]}
             uploaded = drive.files().create(body=meta, media_body=media, fields="id").execute()
             return f"https://drive.google.com/file/d/{uploaded['id']}/view"
-
-        return f"https://drive.google.com/file/d/{found[0]['id']}/view"
     except HttpError as err:
-        st.error(f"\u26a0\ufe0f Drive upload failed: {err.resp.status} – {err._get_reason()}")
+        st.error(f"❌ Drive upload failed: {err.resp.status} – {err._get_reason()}")
         return None
 
-# === UI ===
+# === Streamlit App ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
 st.title("📄 Certificate Extractor + QR Generator")
 st.write("Upload a PDF certificate to extract data, generate a QR code, upload to Google Drive, and sync with Google Sheets.")
@@ -205,8 +185,6 @@ if file:
         else:
             sheet.append_row(row_data)
             st.success("✅ New row added to Google Sheets.")
-
-    except Exception:
-        import traceback
+    except Exception as e:
         st.error("❌ Failed to update Google Sheets.")
-        st.text(traceback.format_exc())
+        st.text(str(e))
