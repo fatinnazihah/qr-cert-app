@@ -15,8 +15,9 @@ from googleapiclient.errors import HttpError
 from qrcode.constants import ERROR_CORRECT_H
 
 # === Config ===
-TEMP_PDF = "examplecert.pdf"
+TEMP_DIR = "temp_pdfs"
 QR_DIR = "qrcodes"
+os.makedirs(TEMP_DIR, exist_ok=True)
 os.makedirs(QR_DIR, exist_ok=True)
 
 # === Utilities ===
@@ -138,53 +139,62 @@ def upload_to_drive(filepath, serial, is_qr=False):
         st.error(f"❌ Drive upload failed: {err.resp.status} – {err._get_reason()}")
         return None
 
-# === Streamlit App ===
+# === Streamlit UI ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
-st.title("📄 Certificate Extractor + QR Generator")
-st.write("Upload a PDF certificate to extract data, generate a QR code, upload to Google Drive, and sync with Google Sheets.")
+st.title("📄 Batch Certificate Extractor + QR Generator")
+st.write("Upload one or more PDF certificates to extract data, generate QR codes, upload to Google Drive, and sync with Google Sheets.")
 
-file = st.file_uploader("📄 Upload Certificate PDF", type=["pdf"])
+uploaded_files = st.file_uploader("📄 Upload Certificate PDFs", type=["pdf"], accept_multiple_files=True)
 
-if file:
-    with open(TEMP_PDF, "wb") as f:
-        f.write(file.read())
-
-    st.info("🔍 Extracting data...")
-    cert, model, serial, cal, exp, lot = extract_data_from_pdf(TEMP_PDF)
-
-    st.success("✅ Data Extracted")
-    st.write(f"**Certificate No:** {cert}")
-    st.write(f"**Model:** {model}")
-    st.write(f"**Serial Number:** {serial}")
-    st.write(f"**Calibration Date:** {cal}")
-    st.write(f"**Expiry Date:** {exp}")
-    st.write(f"**Cylinder Lot #:** {lot}")
-
-    qr_link, qr_path = generate_qr(serial)
-    st.image(qr_path, caption="Generated QR", width=200)
-    st.write(f"[🔗 QR Link]({qr_link})")
-
-    pdf_url = upload_to_drive(TEMP_PDF, serial)
-    qr_url = upload_to_drive(qr_path, serial, is_qr=True)
-
-    if pdf_url: st.write(f"[📁 PDF Drive Link]({pdf_url})")
-    if qr_url: st.write(f"[🗄️ QR Image Link]({qr_url})")
-
+if uploaded_files:
     try:
-        st.info("🗓️ Updating Google Sheets...")
         sheet = connect_to_sheets()
         data = sheet.get_all_values()
         serial_col = 2
-        row = next((i for i, r in enumerate(data) if len(r) > serial_col and r[serial_col] == serial), None)
-
-        row_data = [cert, model, serial, cal, exp, lot, pdf_url, qr_url, qr_link]
-
-        if row is not None:
-            sheet.update(f"A{row+1}:I{row+1}", [row_data])
-            st.success("✅ Google Sheets row updated.")
-        else:
-            sheet.append_row(row_data)
-            st.success("✅ New row added to Google Sheets.")
     except Exception as e:
-        st.error("❌ Failed to update Google Sheets.")
-        st.text(str(e))
+        st.error("❌ Failed to connect to Google Sheets.")
+        st.stop()
+
+    for file in uploaded_files:
+        st.divider()
+        st.subheader(f"📄 Processing: {file.name}")
+        temp_path = os.path.join(TEMP_DIR, file.name)
+
+        with open(temp_path, "wb") as f:
+            f.write(file.read())
+
+        try:
+            cert, model, serial, cal, exp, lot = extract_data_from_pdf(temp_path)
+            st.success("✅ Data Extracted")
+            st.write(f"**Certificate No:** {cert}")
+            st.write(f"**Model:** {model}")
+            st.write(f"**Serial Number:** {serial}")
+            st.write(f"**Calibration Date:** {cal}")
+            st.write(f"**Expiry Date:** {exp}")
+            st.write(f"**Cylinder Lot #:** {lot}")
+
+            qr_link, qr_path = generate_qr(serial)
+            st.image(qr_path, caption="Generated QR", width=200)
+            st.write(f"[🔗 QR Link]({qr_link})")
+
+            pdf_url = upload_to_drive(temp_path, serial)
+            qr_url = upload_to_drive(qr_path, serial, is_qr=True)
+
+            if pdf_url: st.write(f"[📁 PDF Drive Link]({pdf_url})")
+            if qr_url: st.write(f"[🗄️ QR Image Link]({qr_url})")
+
+            row = next((i for i, r in enumerate(data) if len(r) > serial_col and r[serial_col] == serial), None)
+            row_data = [cert, model, serial, cal, exp, lot, pdf_url, qr_url, qr_link]
+
+            if row is not None:
+                sheet.update(f"A{row+1}:I{row+1}", [row_data])
+                st.success("📝 Google Sheets row updated.")
+            else:
+                sheet.append_row(row_data)
+                st.success("🆕 New row added to Google Sheets.")
+
+        except Exception as e:
+            st.error(f"❌ Failed to process {file.name}")
+            st.text(str(e))
+
+    st.success("🎉 All files processed!")
