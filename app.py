@@ -1,3 +1,4 @@
+# === Imports ===
 import os
 import re
 import fitz  # PyMuPDF
@@ -34,7 +35,6 @@ def format_date(date_str):
 def generate_qr(serial):
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     qr_size = 500
-
     qr = qrcode.QRCode(error_correction=ERROR_CORRECT_H, box_size=10, border=4)
     qr.add_data(url)
     qr.make(fit=True)
@@ -84,13 +84,10 @@ def generate_qr(serial):
 def extract_template_type(text, lines):
     joined_text = text.lower()
     lower_lines = [l.lower() for l in lines]
-
     if any("eebd refil" in l or "spiroscape" in l or "interspiro" in l for l in lower_lines):
         return "eebd"
-
     if "certificate" in joined_text and "calibration" in joined_text:
         return "gas_detector"
-
     return "unknown"
 
 def extract_gas_detector(text, lines):
@@ -183,22 +180,21 @@ def upload_to_drive(filepath, serial, is_qr=False):
         st.error(f"❌ Drive upload failed: {err.resp.status} – {err._get_reason()}")
         return None
 
-# === Streamlit UI ===
+# === UI ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
 st.title("📄 Certificate Extractor + QR Generator")
-st.write("Upload one or more PDF certificates to extract data, generate QR codes, upload to Google Drive, and sync with Google Sheets.")
+st.write("Upload PDF certs to extract data, generate QR codes, upload to Drive, and update Google Sheets.")
 
-uploaded_files = st.file_uploader("📄 Upload Certificate PDFs", type=["pdf"], accept_multiple_files=True)
-upload_summary = []
+uploaded_files = st.file_uploader("📄 Upload PDFs", type=["pdf"], accept_multiple_files=True)
 failed_files = []
 
 if uploaded_files:
     try:
         sheet = connect_to_sheets()
-        data = sheet.get_all_values()
+        existing = sheet.get_all_values()
         serial_col = 2
     except:
-        st.error("❌ Failed to connect to Google Sheets.")
+        st.error("❌ Couldn't connect to Google Sheets.")
         st.stop()
 
     for file in uploaded_files:
@@ -211,44 +207,48 @@ if uploaded_files:
         try:
             entries = extract_from_pdf(temp_path)
             if not entries:
-                st.error("❌ Unsupported or unrecognized certificate type.")
+                st.error("❌ Unsupported cert format.")
                 failed_files.append(file.name)
                 continue
 
-            for data_entry in entries:
-                cert, model, serial, cal, exp, lot = data_entry.values()
-
-                if any(v in ["Unknown", "Invalid"] for v in data_entry.values()):
+            summary = []
+            for entry in entries:
+                cert, model, serial, cal, exp, lot = entry.values()
+                if any(v in ["Unknown", "Invalid"] for v in entry.values()):
                     st.error(f"❌ Invalid fields for serial {serial}. Skipping.")
-                    failed_files.append(file.name + f" (serial {serial} invalid)")
+                    failed_files.append(file.name + f" ({serial})")
                     continue
 
-                st.write(f"**SN:** {serial} | Model: {model} | Cert#: {cert}")
-                row = next((i for i, r in enumerate(data) if len(r) > serial_col and r[serial_col] == serial), None)
-
-                if row is not None:
-                    st.info(f"ℹ️ Serial {serial} exists in Google Sheets.")
+                row = next((r for r in existing if len(r) > serial_col and r[serial_col] == serial), None)
+                if row:
+                    st.info(f"ℹ️ {serial} already exists in sheet.")
                     continue
 
                 qr_link, qr_path = generate_qr(serial)
                 pdf_url = upload_to_drive(temp_path, serial)
                 qr_url = upload_to_drive(qr_path, serial, is_qr=True)
-                row_data = [cert, model, serial, cal, exp, lot, pdf_url, qr_url, qr_link]
-                sheet.append_row(row_data)
+                sheet.append_row([cert, model, serial, cal, exp, lot, pdf_url, qr_url, qr_link])
 
-                st.image(qr_path, caption=f"QR for {serial}", width=200)
-                st.table({"Type": ["PDF", "QR", "Link"], "Link": [pdf_url, qr_url, qr_link]})
-                upload_summary.append([serial, model, qr_link, pdf_url])
+                summary.append({
+                    "Serial": serial,
+                    "Model": model,
+                    "Cert No": cert,
+                    "Cal. Date": cal,
+                    "Exp. Date": exp,
+                    "PDF": pdf_url,
+                    "QR Img": qr_url,
+                    "Public Link": qr_link
+                })
+
+            if summary:
+                st.markdown("✅ **Uploaded Records:**")
+                st.dataframe(summary, use_container_width=True)
 
         except Exception as e:
-            st.error(f"❌ Failed to process {file.name}")
+            st.error(f"❌ Failed: {file.name}")
             st.text(str(e))
             failed_files.append(file.name)
 
-    if upload_summary:
-        st.markdown("### ✅ Upload Summary")
-        st.dataframe(upload_summary, use_container_width=True, columns=["Serial", "Model", "QR Link", "PDF URL"])
     if failed_files:
         st.markdown("### ❌ Failed Files")
-        for fail in failed_files:
-            st.markdown(f"- ❌ **{fail}**")
+        st.write("\n".join(failed_files))
