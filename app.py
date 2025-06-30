@@ -141,7 +141,7 @@ def upload_to_drive(filepath, serial, is_qr=False):
 
 # === Streamlit UI ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
-st.title("📄 Batch Certificate Extractor + QR Generator")
+st.title("📄 Certificate Extractor + QR Generator")
 st.write("Upload one or more PDF certificates to extract data, generate QR codes, upload to Google Drive, and sync with Google Sheets.")
 
 uploaded_files = st.file_uploader("📄 Upload Certificate PDFs", type=["pdf"], accept_multiple_files=True)
