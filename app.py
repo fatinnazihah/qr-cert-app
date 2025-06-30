@@ -80,26 +80,20 @@ def generate_qr(serial):
     final_img.convert("RGB").save(path)
     return url, path
 
+# === Extraction ===
 def extract_template_type(text, lines):
-    # Lowercase everything for comparison
     joined_text = text.lower()
     lower_lines = [l.lower() for l in lines]
 
-    # EEBD detection: match either "EEBD Refill" or "Spiroscape"
     if any("eebd refil" in l or "spiroscape" in l or "interspiro" in l for l in lower_lines):
         return "eebd"
 
-    # Gas detector detection: match "gas detector", "radius bz1", or "certificate of calibration"
-    if any("radius bz1" in l or "gas detector" in l or "certificate of calibration" in l for l in lower_lines):
+    if "certificate" in joined_text and "calibration" in joined_text:
         return "gas_detector"
 
     return "unknown"
 
 def extract_gas_detector(text, lines):
-    doc = fitz.open(pdf_path)
-    text = "".join([page.get_text() for page in doc])
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-
     cert_num = re.search(r"\d{1,3}/\d{1,3}/\d{4}\.SRV", text)
     serial = re.search(r"\b\d{7}-\d{3}\b", text)
     cert_num = cert_num.group(0) if cert_num else "Unknown"
@@ -113,27 +107,29 @@ def extract_gas_detector(text, lines):
     lot = re.search(r"Cylinder Lot#\s*(\d+)", text)
     lot = lot.group(1) if lot else "Unknown"
 
-    return cert_num, model, serial, cal, exp, lot
+    return [{
+        "cert": cert_num,
+        "model": model,
+        "serial": serial,
+        "cal": cal,
+        "exp": exp,
+        "lot": lot
+    }]
 
 def extract_eebd(text, lines):
-    # Certificate number
     cert = re.search(r"\d{1,3}/\d{5}/\d{4}\.SRV", text)
     cert = cert.group(0) if cert else "Unknown"
 
-    # Report number
     report = re.search(r"CHSB-ES-\d{2}-\d{2}", text)
     report = report.group(0) if report else "Unknown"
 
-    # Model
     model_line = next((line for line in lines if "INTERSPIRO" in line or "Spiroscape" in line), None)
     model = model_line.strip() if model_line else "Unknown"
 
-    # Dates
     date_lines = [line for line in lines if re.match(r"^[A-Z][a-z]+ \d{1,2}, \d{4}$", line)]
     cal = format_date(date_lines[0]) if len(date_lines) > 0 else "Invalid"
     exp = format_date(date_lines[1]) if len(date_lines) > 1 else "Invalid"
 
-    # Serial Numbers (pipe-separated line)
     serials_line = next((line for line in lines if re.search(r"\d{5}(\s*\|\s*\d{5})+", line)), "")
     serials = re.findall(r"\d{5}", serials_line)
 
@@ -155,6 +151,7 @@ def extract_from_pdf(path):
     else:
         return []
 
+# === Drive & Sheets ===
 def connect_to_sheets():
     creds = st.secrets["google_service_account"]
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
