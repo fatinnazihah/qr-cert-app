@@ -206,5 +206,8 @@ if uploaded:
 """, unsafe_allow_html=True)
 
         except Exception as e:
+            import traceback
             st.error(f"❌ Failed to process {file.name}")
             st.text(str(e))
+            st.text(traceback.format_exc())
+
