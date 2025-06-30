@@ -20,6 +20,11 @@ QR_DIR = "qrcodes"
 os.makedirs(TEMP_DIR, exist_ok=True)
 os.makedirs(QR_DIR, exist_ok=True)
 
+# === Font Config ===
+FONT_BOLD_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+FONT_REG_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+has_fonts = os.path.exists(FONT_BOLD_PATH) and os.path.exists(FONT_REG_PATH)
+
 # === Utilities ===
 def format_date(date_str):
     try:
@@ -57,7 +62,6 @@ def generate_qr(serial):
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
     qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.NEAREST)
 
-    # Insert logo
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         resp = requests.get(logo_url, timeout=5)
@@ -72,19 +76,17 @@ def generate_qr(serial):
 
         qr_img.alpha_composite(frame, ((qr_size - frame_size) // 2, (qr_size - frame_size) // 2))
         qr_img.alpha_composite(logo_img, ((qr_size - logo_img.width) // 2, (qr_size - logo_img.height) // 2))
+    except:
+        pass  # Logo is optional
 
-    except Exception:
-        pass  # Logo optional
-
-    # Add label
     label_height = 160
     label_img = Image.new("RGBA", (qr_size, label_height), "white")
     draw = ImageDraw.Draw(label_img)
 
-    try:
-        font_sn = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40)
-        font_co = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 25)
-    except:
+    if has_fonts:
+        font_sn = ImageFont.truetype(FONT_BOLD_PATH, 40)
+        font_co = ImageFont.truetype(FONT_REG_PATH, 25)
+    else:
         font_sn = font_co = ImageFont.load_default()
 
     sn_text = f"SN: {serial}"
@@ -146,12 +148,15 @@ st.write("Upload one or more PDF certificates to extract data, generate QR codes
 
 uploaded_files = st.file_uploader("📄 Upload Certificate PDFs", type=["pdf"], accept_multiple_files=True)
 
+upload_summary = []
+failed_files = []
+
 if uploaded_files:
     try:
         sheet = connect_to_sheets()
         data = sheet.get_all_values()
         serial_col = 2
-    except Exception as e:
+    except Exception:
         st.error("❌ Failed to connect to Google Sheets.")
         st.stop()
 
@@ -173,43 +178,49 @@ if uploaded_files:
             st.write(f"**Expiry Date:** {exp}")
             st.write(f"**Cylinder Lot #:** {lot}")
 
-            qr_link, qr_path = generate_qr(serial)
-            st.image(qr_path, caption="Generated QR", width=200)
-
-            pdf_url = upload_to_drive(temp_path, serial)
-            qr_url = upload_to_drive(qr_path, serial, is_qr=True)
-
-            table_html = f"""
-            <table style='width:100%; border:1px solid #ccc; border-collapse:collapse;'>
-              <tr>
-                <td style='padding:8px; border:1px solid #ccc;'>PDF</td>
-                <td style='padding:8px; border:1px solid #ccc;'><a href='{pdf_url}' target='_blank'>📁 View PDF</a></td>
-              </tr>
-              <tr>
-                <td style='padding:8px; border:1px solid #ccc;'>QR Image</td>
-                <td style='padding:8px; border:1px solid #ccc;'><a href='{qr_url}' target='_blank'>🗄️ View QR Image</a></td>
-              </tr>
-              <tr>
-                <td style='padding:8px; border:1px solid #ccc;'>QR Link</td>
-                <td style='padding:8px; border:1px solid #ccc;'><a href='{qr_link}' target='_blank'>🔗 QR Web Link</a></td>
-              </tr>
-            </table>
-            """
-            st.markdown(table_html, unsafe_allow_html=True)
-
-
             row = next((i for i, r in enumerate(data) if len(r) > serial_col and r[serial_col] == serial), None)
-            row_data = [cert, model, serial, cal, exp, lot, pdf_url, qr_url, qr_link]
+            row_data = [cert, model, serial, cal, exp, lot]
 
             if row is not None:
-                sheet.update(f"A{row+1}:I{row+1}", [row_data])
-                st.success("📝 Google Sheets row updated.")
+                st.info(f"ℹ️ Serial {serial} already exists in Google Sheets. Skipping QR/PDF upload.")
+                pdf_url = data[row][6] if len(data[row]) > 6 else "-"
+                qr_url = data[row][7] if len(data[row]) > 7 else "-"
+                qr_link = data[row][8] if len(data[row]) > 8 else "-"
             else:
+                qr_link, qr_path = generate_qr(serial)
+                pdf_url = upload_to_drive(temp_path, serial)
+                qr_url = upload_to_drive(qr_path, serial, is_qr=True)
+                row_data += [pdf_url, qr_url, qr_link]
                 sheet.append_row(row_data)
                 st.success("🆕 New row added to Google Sheets.")
+
+            st.image(f"qrcodes/qr_{serial}.png", caption="Generated QR", width=200)
+            st.table({
+                "Type": ["PDF", "QR Image", "QR Link"],
+                "Link": [pdf_url, qr_url, qr_link]
+            })
+
+            upload_summary.append([serial, model, qr_link, pdf_url])
 
         except Exception as e:
             st.error(f"❌ Failed to process {file.name}")
             st.text(str(e))
+            failed_files.append(file.name)
+
+        try:
+            os.remove(temp_path)
+            qr_path = f"qrcodes/qr_{serial}.png"
+            if os.path.exists(qr_path):
+                os.remove(qr_path)
+        except:
+            pass
+
+    if upload_summary:
+        st.markdown("## ✅ Upload Summary")
+        st.dataframe(upload_summary, use_container_width=True, columns=["Serial", "Model", "QR Link", "PDF URL"])
+
+    if failed_files:
+        st.markdown("## ❌ Failed Files")
+        st.code("\n".join(failed_files))
 
     st.success("🎉 All files processed!")
