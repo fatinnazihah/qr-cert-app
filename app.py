@@ -102,18 +102,29 @@ def extract_gas_detector(text, lines):
     return [{"cert": cert, "model": model, "serial": serial, "cal": cal, "exp": exp, "lot": lot}]
 
 def extract_eebd(text, lines):
-    cert = re.search(r"\d{1,3}/\d{1,3}/\d{4}\.SRV", text)
+    # Certificate number
+    cert = re.search(r"\d{1,3}/\d{5}/\d{4}\.SRV", text)
     cert = cert.group(0) if cert else "Unknown"
-    model = next((l for l in lines if re.match(r"INTERSPIRO", l)), "Unknown")
-    serials_line = [line for line in lines if re.match(r"^(\d{5})(\s*\|\s*\d{5})+", line)]
-    serials = re.findall(r"\d{5}", serials_line[0]) if serials_line else []
-    date_lines = [l for l in lines if re.match(r"^[A-Z][a-z]+ \d{1,2}, \d{4}$", l)]
+
+    # Report number
+    report = re.search(r"CHSB-ES-\d{2}-\d{2}", text)
+    report = report.group(0) if report else "Unknown"
+
+    # Model
+    model_line = next((line for line in lines if "INTERSPIRO" in line or "Spiroscape" in line), None)
+    model = model_line.strip() if model_line else "Unknown"
+
+    # Dates
+    date_lines = [line for line in lines if re.match(r"^[A-Z][a-z]+ \d{1,2}, \d{4}$", line)]
     cal = format_date(date_lines[0]) if len(date_lines) > 0 else "Invalid"
     exp = format_date(date_lines[1]) if len(date_lines) > 1 else "Invalid"
-    report_num = next((l for l in lines if "CHSB-ES" in l), "Unknown")
+
+    # Serial Numbers (pipe-separated line)
+    serials_line = next((line for line in lines if re.search(r"\d{5}(\s*\|\s*\d{5})+", line)), "")
+    serials = re.findall(r"\d{5}", serials_line)
 
     return [
-        {"cert": cert, "model": model, "serial": sn, "cal": cal, "exp": exp, "lot": report_num}
+        {"cert": cert, "model": model, "serial": sn, "cal": cal, "exp": exp, "lot": report}
         for sn in serials
     ]
 
