@@ -80,7 +80,7 @@ def generate_qr(serial):
     final_img.convert("RGB").save(path)
     return url, path
 
-# === Extraction ===
+# === Extraction Functions ===
 def extract_template_type(text, lines):
     joined_text = text.lower()
     lower_lines = [l.lower() for l in lines]
@@ -95,58 +95,34 @@ def extract_gas_detector(text, lines):
     serial = re.search(r"\b\d{7}-\d{3}\b", text)
     cert_num = cert_num.group(0) if cert_num else "Unknown"
     serial = serial.group(0) if serial else "Unknown"
-
     model = lines[lines.index(cert_num) + 2] if cert_num in lines else "Unknown"
     date_lines = [l for l in lines if re.match(r"^[A-Z][a-z]+ \d{1,2}, \d{4}$", l)]
     cal = format_date(date_lines[0]) if len(date_lines) > 0 else "Invalid"
     exp = format_date(date_lines[1]) if len(date_lines) > 1 else "Invalid"
-
     lot = re.search(r"Cylinder Lot#\s*(\d+)", text)
     lot = lot.group(1) if lot else "Unknown"
-
-    return [{
-        "cert": cert_num,
-        "model": model,
-        "serial": serial,
-        "cal": cal,
-        "exp": exp,
-        "lot": lot
-    }]
+    return [{"cert": cert_num, "model": model, "serial": serial, "cal": cal, "exp": exp, "lot": lot}]
 
 def extract_eebd(text, lines):
     cert = re.search(r"\d{1,3}/\d{5}/\d{4}\.SRV", text)
     cert = cert.group(0) if cert else "Unknown"
-
     report = re.search(r"CHSB-ES-\d{2}-\d{2}", text)
     report = report.group(0) if report else "Unknown"
-
     model_line = next((line for line in lines if "INTERSPIRO" in line or "Spiroscape" in line), None)
     model = model_line.strip() if model_line else "Unknown"
-
     date_lines = [line for line in lines if re.match(r"^[A-Z][a-z]+ \d{1,2}, \d{4}$", line)]
     cal = format_date(date_lines[0]) if len(date_lines) > 0 else "Invalid"
     exp = format_date(date_lines[1]) if len(date_lines) > 1 else "Invalid"
-
     serials_line = next((line for line in lines if re.search(r"\d{5}(\s*\|\s*\d{5})+", line)), "")
     serials = re.findall(r"\d{5}", serials_line)
-
-    return [
-        {"cert": cert, "model": model, "serial": sn, "cal": cal, "exp": exp, "lot": report}
-        for sn in serials
-    ]
+    return [{"cert": cert, "model": model, "serial": sn, "cal": cal, "exp": exp, "lot": report} for sn in serials]
 
 def extract_from_pdf(path):
     doc = fitz.open(path)
     text = "".join([page.get_text() for page in doc])
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     template = extract_template_type(text, lines)
-
-    if template == "gas_detector":
-        return extract_gas_detector(text, lines)
-    elif template == "eebd":
-        return extract_eebd(text, lines)
-    else:
-        return []
+    return extract_gas_detector(text, lines) if template == "gas_detector" else extract_eebd(text, lines) if template == "eebd" else []
 
 # === Drive & Sheets ===
 def connect_to_sheets():
@@ -163,7 +139,6 @@ def upload_to_drive(filepath, serial, is_qr=False):
     drive = build("drive", "v3", credentials=creds)
     folder_id = st.secrets["drive"]["qr_folder_id"] if is_qr else st.secrets["drive"]["folder_id"]
     filename = f"qr_{serial}.png" if is_qr else f"{serial}.pdf"
-
     query = f"name = '{filename}' and '{folder_id}' in parents and trashed = false"
     found = drive.files().list(q=query, spaces='drive', fields='files(id)').execute().get('files', [])
     media = MediaFileUpload(filepath, mimetype="image/png" if is_qr else "application/pdf")
@@ -180,85 +155,62 @@ def upload_to_drive(filepath, serial, is_qr=False):
         st.error(f"❌ Drive upload failed: {err.resp.status} – {err._get_reason()}")
         return None
 
-# === UI ===
+# === Streamlit UI ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
 st.title("📄 Certificate Extractor + QR Generator")
 st.write("Upload PDF certs to extract data, generate QR codes, upload to Drive, and update Google Sheets.")
 
 uploaded_files = st.file_uploader("📄 Upload PDFs", type=["pdf"], accept_multiple_files=True)
-failed_files = []
-
 if uploaded_files:
     try:
         sheet = connect_to_sheets()
-        existing = sheet.get_all_values()
+        all_rows = sheet.get_all_values()
         serial_col = 2
     except:
-        st.error("❌ Couldn't connect to Google Sheets.")
+        st.error("❌ Google Sheets error.")
         st.stop()
 
     for file in uploaded_files:
         st.divider()
         st.subheader(f"📄 {file.name}")
-        temp_path = os.path.join(TEMP_DIR, file.name)
-        with open(temp_path, "wb") as f:
-            f.write(file.read())
+        path = os.path.join(TEMP_DIR, file.name)
+        with open(path, "wb") as f: f.write(file.read())
 
         try:
-            entries = extract_from_pdf(temp_path)
+            entries = extract_from_pdf(path)
             if not entries:
-                st.error("❌ Unsupported cert format.")
-                failed_files.append(file.name)
+                st.error("❌ Format not supported.")
                 continue
 
-            summary = []
-            for entry in entries:
-                cert, model, serial, cal, exp, lot = entry.values()
-                if any(v in ["Unknown", "Invalid"] for v in entry.values()):
-                    st.error(f"❌ Invalid fields for serial {serial}. Skipping.")
-                    failed_files.append(file.name + f" ({serial})")
+            for data in entries:
+                cert, model, serial, cal, exp, lot = data.values()
+                if any(v in ["Unknown", "Invalid"] for v in data.values()):
+                    st.error(f"❌ Skipping {serial}: Missing fields")
                     continue
 
-                row = next((r for r in existing if len(r) > serial_col and r[serial_col] == serial), None)
-                if row:
-                    st.info(f"ℹ️ {serial} already exists in sheet. Data in sheet:")
-                
-                    # Reconstruct the links from the sheet if needed
-                    sheet_row = existing[existing.index(row)]
-                    pdf_url = sheet_row[6] if len(sheet_row) > 6 else "N/A"
-                    qr_url = sheet_row[7] if len(sheet_row) > 7 else "N/A"
-                    qr_link = sheet_row[8] if len(sheet_row) > 8 else f"https://qrcertificates-30ddb.web.app/?id={serial}"
+                found_row = next((r for r in all_rows if len(r) > serial_col and r[serial_col] == serial), None)
+                if found_row:
+                    pdf_url = found_row[6] if len(found_row) > 6 else "N/A"
+                    qr_url = found_row[7] if len(found_row) > 7 else "N/A"
+                    qr_link = found_row[8] if len(found_row) > 8 else f"https://qrcertificates-30ddb.web.app/?id={serial}"
+                    st.info(f"ℹ️ {serial} already exists.")
                 else:
                     qr_link, qr_path = generate_qr(serial)
-                    pdf_url = upload_to_drive(temp_path, serial)
+                    pdf_url = upload_to_drive(path, serial)
                     qr_url = upload_to_drive(qr_path, serial, is_qr=True)
                     sheet.append_row([cert, model, serial, cal, exp, lot, pdf_url, qr_url, qr_link])
-                
-                qr_link, qr_path = generate_qr(serial)
-                pdf_url = upload_to_drive(temp_path, serial)
-                qr_url = upload_to_drive(qr_path, serial, is_qr=True)
-                sheet.append_row([cert, model, serial, cal, exp, lot, pdf_url, qr_url, qr_link])
 
-                summary.append({
-                    "Serial": serial,
-                    "Model": model,
-                    "Cert No": cert,
-                    "Cal. Date": cal,
-                    "Exp. Date": exp,
-                    "PDF": pdf_url,
-                    "QR Img": qr_url,
-                    "Public Link": qr_link
-                })
-
-            if summary:
-                st.markdown("✅ **Uploaded Records:**")
-                st.dataframe(summary, use_container_width=True)
+                st.markdown(f"""### 🧾 Serial: **{serial}**
+- **Model:** {model}
+- **Certificate No:** {cert}
+- **Service Date:** {cal}
+- **Next Service:** {exp}
+- **Lot/Report No:** {lot}
+- **PDF:** <div style="word-wrap: break-word">{pdf_url}</div>
+- **QR Image:** <div style="word-wrap: break-word">{qr_url}</div>
+- **QR Link:** <div style="word-wrap: break-word">{qr_link}</div>
+""", unsafe_allow_html=True)
 
         except Exception as e:
-            st.error(f"❌ Failed: {file.name}")
+            st.error(f"❌ Failed to process {file.name}")
             st.text(str(e))
-            failed_files.append(file.name)
-
-    if failed_files:
-        st.markdown("### ❌ Failed Files")
-        st.write("\n".join(failed_files))
