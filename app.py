@@ -191,7 +191,6 @@ if uploaded:
                     qr_url = upload_to_drive(qr_path, serial, is_qr=True)
                     sheet.append_row([cert, model, serial, cal, exp, lot, pdf_url, qr_url, qr_link])
 
-                # Display table
                 st.markdown(f"""
 <table style="width:100%; word-break:break-word">
   <tr><th align="left">Serial Number</th><td>{serial}</td></tr>
