@@ -182,10 +182,6 @@ if uploaded_files:
 
             table_html = f"""
             <table style='width:100%; border:1px solid #ccc; border-collapse:collapse;'>
-              <tr style='background-color:#f2f2f2;'>
-                <th style='padding:8px; border:1px solid #ccc;'>Type</th>
-                <th style='padding:8px; border:1px solid #ccc;'>Link</th>
-              </tr>
               <tr>
                 <td style='padding:8px; border:1px solid #ccc;'>PDF</td>
                 <td style='padding:8px; border:1px solid #ccc;'><a href='{pdf_url}' target='_blank'>📁 View PDF</a></td>
