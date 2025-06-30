@@ -1,6 +1,5 @@
 # === Imports ===
-import os
-import re
+import os, re
 import fitz  # PyMuPDF
 import qrcode
 import streamlit as st
@@ -15,16 +14,15 @@ from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 from qrcode.constants import ERROR_CORRECT_H
 
-# === Directories ===
+# === Constants ===
 TEMP_DIR = "temp_pdfs"
 QR_DIR = "qrcodes"
-os.makedirs(TEMP_DIR, exist_ok=True)
-os.makedirs(QR_DIR, exist_ok=True)
-
-# === Font Paths ===
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 fonts_exist = os.path.exists(FONT_BOLD) and os.path.exists(FONT_REG)
+
+os.makedirs(TEMP_DIR, exist_ok=True)
+os.makedirs(QR_DIR, exist_ok=True)
 
 # === Utility Functions ===
 def format_date(date_str):
@@ -45,8 +43,7 @@ def generate_qr_image(serial):
 
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
-        logo_data = requests.get(logo_url, timeout=5).content
-        logo = Image.open(BytesIO(logo_data)).convert("RGBA")
+        logo = Image.open(BytesIO(requests.get(logo_url, timeout=5).content)).convert("RGBA")
         logo.thumbnail((100, 100), Image.Resampling.LANCZOS)
 
         frame = Image.new("RGBA", (120, 120), (255, 255, 255, 255))
@@ -64,13 +61,8 @@ def generate_qr_image(serial):
     font_sn = ImageFont.truetype(FONT_BOLD, 40) if fonts_exist else ImageFont.load_default()
     font_co = ImageFont.truetype(FONT_REG, 25) if fonts_exist else ImageFont.load_default()
 
-    sn_text = f"SN: {serial}"
-    co_text = "Cahaya Hornbill Sdn Bhd"
-    sn_width = draw.textbbox((0, 0), sn_text, font=font_sn)[2]
-    co_width = draw.textbbox((0, 0), co_text, font=font_co)[2]
-
-    draw.text(((size - sn_width) // 2, 10), sn_text, font=font_sn, fill="black")
-    draw.text(((size - co_width) // 2, 60), co_text, font=font_co, fill="black")
+    draw.text(((size - draw.textlength(f"SN: {serial}", font=font_sn)) // 2, 10), f"SN: {serial}", font=font_sn, fill="black")
+    draw.text(((size - draw.textlength("Cahaya Hornbill Sdn Bhd", font=font_co)) // 2, 60), "Cahaya Hornbill Sdn Bhd", font=font_co, fill="black")
 
     final = Image.new("RGBA", (size, size + 160), "white")
     final.paste(qr_img, (0, 0), qr_img)
@@ -82,33 +74,34 @@ def generate_qr_image(serial):
 
 # === Extraction Functions ===
 def extract_template_type(text, lines):
-    lower_text = text.lower()
-    lower_lines = [l.lower() for l in lines]
-    if any(keyword in l for keyword in ["eebd refil", "spiroscape", "interspiro"] for l in lower_lines):
+    lines_lower = [l.lower() for l in lines]
+    if any(k in l for l in lines_lower for k in ["eebd refil", "spiroscape", "interspiro"]):
         return "eebd"
-    if "certificate" in lower_text and "calibration" in lower_text:
+    if "certificate" in text.lower() and "calibration" in text.lower():
         return "gas_detector"
     return "unknown"
 
 def extract_gas_detector(text, lines):
     cert = re.search(r"\d{1,3}/\d{1,3}/\d{4}\.SRV", text)
     serial = re.search(r"\b\d{7}-\d{3}\b", text)
-    cert = cert.group(0) if cert else "Unknown"
-    serial = serial.group(0) if serial else "Unknown"
-    model = lines[lines.index(cert) + 2] if cert in lines else "Unknown"
+    model = lines[lines.index(cert.group(0)) + 2] if cert and cert.group(0) in lines else "Unknown"
     dates = [l for l in lines if re.match(r"^[A-Z][a-z]+ \d{1,2}, \d{4}$", l)]
-    cal, exp = (format_date(dates[0]), format_date(dates[1])) if len(dates) > 1 else ("Invalid", "Invalid")
     lot = re.search(r"Cylinder Lot#\s*(\d+)", text)
-    lot = lot.group(1) if lot else "Unknown"
-    return [{"cert": cert, "model": model, "serial": serial, "cal": cal, "exp": exp, "lot": lot}]
+    return [{
+        "cert": cert.group(0) if cert else "Unknown",
+        "model": model,
+        "serial": serial.group(0) if serial else "Unknown",
+        "cal": format_date(dates[0]) if len(dates) > 0 else "Invalid",
+        "exp": format_date(dates[1]) if len(dates) > 1 else "Invalid",
+        "lot": lot.group(1) if lot else "Unknown"
+    }]
 
 def extract_eebd(text, lines):
     cert = re.search(r"\d{1,3}/\d{5}/\d{4}\.SRV", text)
     report = re.search(r"CHSB-ES-\d{2}-\d{2}", text)
     model_line = next((l for l in lines if "INTERSPIRO" in l or "Spiroscape" in l), None)
     dates = [l for l in lines if re.match(r"^[A-Z][a-z]+ \d{1,2}, \d{4}$", l)]
-    serials_line = next((l for l in lines if re.search(r"\d{5}(\s*\|\s*\d{5})+", l)), "")
-    serials = re.findall(r"\d{5}", serials_line)
+    serials = re.findall(r"\d{5}", next((l for l in lines if re.search(r"\d{5}(\s*\|\s*\d{5})+", l)), ""))
 
     return [{
         "cert": cert.group(0) if cert else "Unknown",
@@ -121,17 +114,21 @@ def extract_eebd(text, lines):
 
 def extract_from_pdf(path):
     doc = fitz.open(path)
-    text = "".join([p.get_text() for p in doc])
+    text = "".join(p.get_text() for p in doc)
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     template = extract_template_type(text, lines)
-    return extract_gas_detector(text, lines) if template == "gas_detector" else extract_eebd(text, lines) if template == "eebd" else []
+    if template == "gas_detector":
+        return extract_gas_detector(text, lines), "GD"
+    if template == "eebd":
+        return extract_eebd(text, lines), "EEBD"
+    return [], "UNKNOWN"
 
-# === Google Drive & Sheets ===
-def connect_to_sheets():
+# === Google API ===
+def connect_to_sheet(tab_name):
     creds = st.secrets["google_service_account"]
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     credentials = service_account.Credentials.from_service_account_info(creds, scopes=scopes)
-    return gspread.authorize(credentials).open("Calibration Certificates").worksheet("certs")
+    return gspread.authorize(credentials).open("Calibration Certificates").worksheet(tab_name)
 
 def upload_to_drive(path, serial, is_qr=False):
     creds = service_account.Credentials.from_service_account_info(st.secrets["google_service_account"], scopes=["https://www.googleapis.com/auth/drive"])
@@ -146,28 +143,19 @@ def upload_to_drive(path, serial, is_qr=False):
         if existing:
             drive.files().update(fileId=existing[0]['id'], media_body=media).execute()
             return f"https://drive.google.com/file/d/{existing[0]['id']}/view"
-        meta = {"name": name, "parents": [folder]}
-        file = drive.files().create(body=meta, media_body=media, fields="id").execute()
+        file = drive.files().create(body={"name": name, "parents": [folder]}, media_body=media, fields="id").execute()
         return f"https://drive.google.com/file/d/{file['id']}/view"
     except HttpError as e:
         st.error(f"❌ Drive upload failed: {e}")
         return None
 
-# === Streamlit UI ===
+# === Streamlit App ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
 st.title("📄 Certificate Extractor + QR Generator")
 st.write("Upload PDF certs to extract data, generate QR codes, upload to Drive, and update Google Sheets.")
 
 uploaded = st.file_uploader("📄 Upload PDFs", type=["pdf"], accept_multiple_files=True)
 if uploaded:
-    try:
-        sheet = connect_to_sheets()
-        records = sheet.get_all_values()
-        col_serial = 2
-    except:
-        st.error("❌ Couldn't connect to Google Sheets.")
-        st.stop()
-
     for file in uploaded:
         st.divider()
         st.subheader(f"📄 {file.name}")
@@ -176,30 +164,34 @@ if uploaded:
             f.write(file.read())
 
         try:
-            extracted = extract_from_pdf(temp_path)
-            if not extracted:
-                st.error("❌ Format not supported.")
+            extracted, tab_name = extract_from_pdf(temp_path)
+            if tab_name == "UNKNOWN" or not extracted:
+                st.error("❌ Unsupported format.")
                 continue
 
-            for cert_data in extracted:
-                cert, model, serial, cal, exp, lot = cert_data.values()
-                if any(v in ["Unknown", "Invalid"] for v in cert_data.values()):
-                    st.error(f"❌ Skipping {serial}: Invalid data")
+            sheet = connect_to_sheet(tab_name)
+            existing = sheet.get_all_values()
+            serial_col = 2
+
+            for data in extracted:
+                cert, model, serial, cal, exp, lot = data.values()
+                if any(v in ["Unknown", "Invalid"] for v in data.values()):
+                    st.error(f"❌ Skipping {serial}: Incomplete fields.")
                     continue
 
-                row = next((r for r in records if len(r) > col_serial and r[col_serial] == serial), None)
+                row = next((r for r in existing if len(r) > serial_col and r[serial_col] == serial), None)
                 if row:
                     pdf_url = row[6] if len(row) > 6 else "N/A"
                     qr_url = row[7] if len(row) > 7 else "N/A"
                     qr_link = row[8] if len(row) > 8 else f"https://qrcertificates-30ddb.web.app/?id={serial}"
-                    st.info(f"ℹ️ {serial} already exists in sheet.")
+                    st.info(f"ℹ️ {serial} already exists.")
                 else:
-                    qr_link, qr_img_path = generate_qr_image(serial)
+                    qr_link, qr_path = generate_qr_image(serial)
                     pdf_url = upload_to_drive(temp_path, serial)
-                    qr_url = upload_to_drive(qr_img_path, serial, is_qr=True)
+                    qr_url = upload_to_drive(qr_path, serial, is_qr=True)
                     sheet.append_row([cert, model, serial, cal, exp, lot, pdf_url, qr_url, qr_link])
 
-                # Vertical table
+                # Display table
                 st.markdown(f"""
 <table style="width:100%; word-break:break-word">
   <tr><th align="left">Serial Number</th><td>{serial}</td></tr>
