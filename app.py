@@ -175,7 +175,6 @@ if uploaded_files:
 
             qr_link, qr_path = generate_qr(serial)
             st.image(qr_path, caption="Generated QR", width=200)
-            st.write(f"[🔗 QR Link]({qr_link})")
 
             pdf_url = upload_to_drive(temp_path, serial)
             qr_url = upload_to_drive(qr_path, serial, is_qr=True)
