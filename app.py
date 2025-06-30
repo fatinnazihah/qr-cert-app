@@ -128,7 +128,7 @@ def connect_to_sheet(tab_name):
     creds = st.secrets["google_service_account"]
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     credentials = service_account.Credentials.from_service_account_info(creds, scopes=scopes)
-    return gspread.authorize(credentials).open("Calibration Certificates").worksheet(tab_name)
+    return gspread.authorize(credentials).open("Certificates").worksheet(tab_name)
 
 def upload_to_drive(path, serial, is_qr=False):
     creds = service_account.Credentials.from_service_account_info(st.secrets["google_service_account"], scopes=["https://www.googleapis.com/auth/drive"])
