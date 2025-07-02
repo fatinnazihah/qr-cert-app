@@ -101,16 +101,18 @@ def extract_eebd(text, lines):
     report = re.search(r"CHSB-ES-\d{2}-\d{2}", text)
     model_line = next((l for l in lines if "INTERSPIRO" in l or "Spiroscape" in l), None)
     dates = [l for l in lines if re.match(r"^[A-Z][a-z]+ \d{1,2}, \d{4}$", l)]
-    serials = re.findall(r"\d{5}", next((l for l in lines if re.search(r"\d{5}(\s*\|\s*\d{5})+", l)), ""))
+
+    # Now only get the first 5-digit number
+    serial_match = re.search(r"\b\d{5}\b", text)
 
     return [{
         "cert": cert.group(0) if cert else "Unknown",
         "model": model_line.strip() if model_line else "Unknown",
-        "serial": sn,
+        "serial": serial_match.group(0) if serial_match else "Unknown",
         "cal": format_date(dates[0]) if len(dates) > 0 else "Invalid",
         "exp": format_date(dates[1]) if len(dates) > 1 else "Invalid",
         "lot": report.group(0) if report else "Unknown"
-    } for sn in serials]
+    }]
 
 def extract_from_pdf(path):
     doc = fitz.open(path)
