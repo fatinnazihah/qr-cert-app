@@ -72,6 +72,8 @@ def generate_qr_image(serial):
 
 # === Extraction Functions ===
 def extract_template_type(text, lines):
+    if "ABSORBER" in text:
+        return "absorber"
     if "FULL BODY HARNESS" in text or "PROFESSIONAL HARNESSES" in text:
         return "harness"
     if any(k in l.lower() for l in lines for k in ["eebd refil", "spiroscape", "interspiro"]):
@@ -79,6 +81,28 @@ def extract_template_type(text, lines):
     if "certificate" in text.lower() and "calibration" in text.lower():
         return "gas_detector"
     return "unknown"
+
+def extract_absorber(text, lines):
+    cert = re.search(r"\d{2}/\d{5}/\d{4}\.SRV", text)
+    report = re.search(r"CHSB-\w+-\d{2}-\d{2}", text)
+    model_line = next((l for l in lines if "ABSORBING LANYARD" in l or "SHOCK ABSORBER" in l), "Unknown")
+
+    serials = re.findall(r"\d{8}:\d{4}", text)
+    first_serial = serials[0] if serials else "Unknown"
+
+    service_date = re.search(r"\b\d{2}/\d{2}/\d{4}\b", text)
+    next_date = re.findall(r"\b\d{2}/\d{2}/\d{4}\b", text)
+    cal = format_date(next_date[1]) if len(next_date) > 1 else "Invalid"
+    exp = format_date(next_date[0]) if next_date else "Invalid"
+
+    return [{
+        "cert": cert.group(0) if cert else "Unknown",
+        "model": model_line.strip(),
+        "serial": first_serial,
+        "cal": cal,
+        "exp": exp,
+        "lot": report.group(0) if report else "Unknown"
+    }]
 
 def extract_harness(text, lines):
     cert = re.search(r"\d{2}/\d{5}/\d{4}\.SRV", text)
@@ -107,6 +131,8 @@ def extract_from_pdf(path):
         return extract_eebd(text, lines), "EEBD"
     if template == "harness":
         return extract_harness(text, lines), "HARNESS"
+    if template == "absorber":
+        return extract_absorber(text, lines), "ABSORBER"
     return [], "UNKNOWN"
 
 # === Google API ===
