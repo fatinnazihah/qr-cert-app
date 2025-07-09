@@ -20,37 +20,38 @@ QR_DIR = "qrcodes"
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 fonts_exist = os.path.exists(FONT_BOLD) and os.path.exists(FONT_REG)
-
 os.makedirs(TEMP_DIR, exist_ok=True)
 os.makedirs(QR_DIR, exist_ok=True)
 
-# === Utility Functions ===
+# === Utility ===
 def format_date(date_str):
     try:
-        return datetime.strptime(date_str, "%B %d, %Y").strftime("%Y-%m-%d")
+        return datetime.strptime(date_str.strip(), "%d/%m/%Y").strftime("%Y-%m-%d")
     except:
-        return "Invalid"
+        try:
+            return datetime.strptime(date_str.strip(), "%d-%m-%Y").strftime("%Y-%m-%d")
+        except:
+            try:
+                return datetime.strptime(date_str.strip(), "%d/%m/%y").strftime("%Y-%m-%d")
+            except:
+                return date_str
 
 def generate_qr_image(serial):
     url = f"https://qrcertificates-30ddb.web.app/?id={serial}"
     size = 500
-
     qr = qrcode.QRCode(error_correction=ERROR_CORRECT_H, box_size=10, border=4)
     qr.add_data(url)
     qr.make(fit=True)
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
     qr_img = qr_img.resize((size, size), Image.Resampling.NEAREST)
-
     try:
         logo_url = "https://raw.githubusercontent.com/fatinnazihah/qr-cert-app/main/chsb_logo.png"
         logo = Image.open(BytesIO(requests.get(logo_url, timeout=5).content)).convert("RGBA")
         logo.thumbnail((100, 100), Image.Resampling.LANCZOS)
-
         frame = Image.new("RGBA", (120, 120), (255, 255, 255, 255))
         mask = Image.new("L", (120, 120), 0)
         ImageDraw.Draw(mask).rounded_rectangle([0, 0, 120, 120], radius=20, fill=255)
         frame.putalpha(mask)
-
         qr_img.alpha_composite(frame, ((size - 120) // 2, (size - 120) // 2))
         qr_img.alpha_composite(logo, ((size - logo.width) // 2, (size - logo.height) // 2))
     except:
@@ -60,57 +61,38 @@ def generate_qr_image(serial):
     draw = ImageDraw.Draw(label)
     font_sn = ImageFont.truetype(FONT_BOLD, 40) if fonts_exist else ImageFont.load_default()
     font_co = ImageFont.truetype(FONT_REG, 25) if fonts_exist else ImageFont.load_default()
-
     draw.text(((size - draw.textlength(f"SN: {serial}", font=font_sn)) // 2, 10), f"SN: {serial}", font=font_sn, fill="black")
     draw.text(((size - draw.textlength("Cahaya Hornbill Sdn Bhd", font=font_co)) // 2, 60), "Cahaya Hornbill Sdn Bhd", font=font_co, fill="black")
-
     final = Image.new("RGBA", (size, size + 160), "white")
     final.paste(qr_img, (0, 0), qr_img)
     final.paste(label, (0, size), label)
-
     path = os.path.join(QR_DIR, f"qr_{serial}.png")
     final.convert("RGB").save(path)
     return url, path
 
 # === Extraction Functions ===
 def extract_template_type(text, lines):
-    lines_lower = [l.lower() for l in lines]
-    if any(k in l for l in lines_lower for k in ["eebd refil", "spiroscape", "interspiro"]):
+    if "FULL BODY HARNESS" in text or "PROFESSIONAL HARNESSES" in text:
+        return "harness"
+    if any(k in l.lower() for l in lines for k in ["eebd refil", "spiroscape", "interspiro"]):
         return "eebd"
     if "certificate" in text.lower() and "calibration" in text.lower():
         return "gas_detector"
     return "unknown"
 
-def extract_gas_detector(text, lines):
-    cert = re.search(r"\d{1,3}/\d{1,3}/\d{4}\.SRV", text)
-    serial = re.search(r"\b\d{7}-\d{3}\b", text)
-    model = lines[lines.index(cert.group(0)) + 2] if cert and cert.group(0) in lines else "Unknown"
-    dates = [l for l in lines if re.match(r"^[A-Z][a-z]+ \d{1,2}, \d{4}$", l)]
-    lot = re.search(r"Cylinder Lot#\s*(\d+)", text)
+def extract_harness(text, lines):
+    cert = re.search(r"\d{2}/\d{5}/\d{4}\.SRV", text)
+    report = re.search(r"CHSB-\w+-\d{2}-\d{2}", text)
+    model_line = next((l for l in lines if "FULL BODY" in l and "HARNESS" in l), "Unknown")
+    serial_match = re.search(r"\d{7}:\d{4}", text)
+    date = re.search(r"Date:\s*(\d{2}/\d{2}/\d{4})", text)
+    next_date = re.search(r"Next Inspection Date:\s*(\d{2}/\d{2}/\d{4})", text)
     return [{
         "cert": cert.group(0) if cert else "Unknown",
-        "model": model,
-        "serial": serial.group(0) if serial else "Unknown",
-        "cal": format_date(dates[0]) if len(dates) > 0 else "Invalid",
-        "exp": format_date(dates[1]) if len(dates) > 1 else "Invalid",
-        "lot": lot.group(1) if lot else "Unknown"
-    }]
-
-def extract_eebd(text, lines):
-    cert = re.search(r"\d{1,3}/\d{5}/\d{4}\.SRV", text)
-    report = re.search(r"CHSB-ES-\d{2}-\d{2}", text)
-    model_line = next((l for l in lines if "INTERSPIRO" in l or "Spiroscape" in l), None)
-    dates = [l for l in lines if re.match(r"^[A-Z][a-z]+ \d{1,2}, \d{4}$", l)]
-
-    # Now only get the first 5-digit number
-    serial_match = re.search(r"\b\d{5}\b", text)
-
-    return [{
-        "cert": cert.group(0) if cert else "Unknown",
-        "model": model_line.strip() if model_line else "Unknown",
+        "model": model_line.strip(),
         "serial": serial_match.group(0) if serial_match else "Unknown",
-        "cal": format_date(dates[0]) if len(dates) > 0 else "Invalid",
-        "exp": format_date(dates[1]) if len(dates) > 1 else "Invalid",
+        "cal": format_date(date.group(1)) if date else "Invalid",
+        "exp": format_date(next_date.group(1)) if next_date else "Invalid",
         "lot": report.group(0) if report else "Unknown"
     }]
 
@@ -123,6 +105,8 @@ def extract_from_pdf(path):
         return extract_gas_detector(text, lines), "GD"
     if template == "eebd":
         return extract_eebd(text, lines), "EEBD"
+    if template == "harness":
+        return extract_harness(text, lines), "HARNESS"
     return [], "UNKNOWN"
 
 # === Google API ===
@@ -140,7 +124,6 @@ def upload_to_drive(path, serial, is_qr=False):
     query = f"name='{name}' and '{folder}' in parents and trashed = false"
     existing = drive.files().list(q=query, spaces='drive', fields='files(id)').execute().get('files', [])
     media = MediaFileUpload(path, mimetype="image/png" if is_qr else "application/pdf")
-
     try:
         if existing:
             drive.files().update(fileId=existing[0]['id'], media_body=media).execute()
@@ -212,4 +195,3 @@ if uploaded:
             st.error(f"❌ Failed to process {file.name}")
             st.text(str(e))
             st.text(traceback.format_exc())
-
