@@ -156,17 +156,34 @@ def extract_eebd(text, lines):
 def extract_from_pdf(path):
     doc = fitz.open(path)
     text = "".join(p.get_text() for p in doc)
+    cert_blocks = re.split(r"(?:CERTIFICATE OF CALIBRATION)", text)
+    cert_blocks = [("CERTIFICATE OF CALIBRATION" + block).strip() for block in cert_blocks if block.strip()]
     lines = [l.strip() for l in text.splitlines() if l.strip()]
-    template = extract_template_type(text, lines)
-    if template == "gas_detector":
-        return extract_gas_detector(text, lines), "GD"
-    if template == "eebd":
-        return extract_eebd(text, lines), "EEBD"
-    if template == "harness":
-        return extract_harness(text, lines), "HARNESS"
-    if template == "absorber":
-        return extract_absorber(text, lines), "ABSORBER"
-    return [], "UNKNOWN"
+    results = []
+    tab = None
+    
+    for block in cert_blocks:
+        lines = [l.strip() for l in block.splitlines() if l.strip()]
+        template = extract_template_type(block, lines)
+        
+        if template == "gas_detector":
+            extracted = extract_gas_detector(block, lines)
+            tab = "GD"
+        elif template == "eebd":
+            extracted = extract_eebd(block, lines)
+            tab = "EEBD"
+        elif template == "harness":
+            extracted = extract_harness(block, lines)
+            tab = "HARNESS"
+        elif template == "absorber":
+            extracted = extract_absorber(block, lines)
+            tab = "ABSORBER"
+        else:
+            continue
+    
+        results.extend(extracted)
+    
+    return results, tab or "UNKNOWN"
 
 # === Google API ===
 def connect_to_sheet(tab_name):
