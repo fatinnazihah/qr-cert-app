@@ -121,18 +121,25 @@ def extract_harness(text, lines):
     }]
 
 def extract_gas_detector(text, lines):
-    cert = re.search(r"\d{1,3}/\d{1,3}/\d{4}\.SRV", text)
-    serial = re.search(r"\b\d{7}-\d{3}\b", text)
-    model = lines[lines.index(cert.group(0)) + 2] if cert and cert.group(0) in lines else "Unknown"
-    dates = [l for l in lines if re.match(r"^[A-Z][a-z]+ \d{1,2}, \d{4}$", l)]
-    lot = re.search(r"Cylinder Lot#\s*(\d+)", text)
+    cert_match = re.search(r"\d{1,3}/\d{5}/\d{4}\.SRV", text)
+    serial_match = re.search(r"Serial Number\s*(SN\w+)", text)
+    model_match = re.search(r"(CHSB/WIM/\d{3}/\d{2})", text)
+    lot_match = re.search(r"(CHSB-ES-\d{2}-\d{2})", text)
+
+    # Find all full dates like 'September 24, 2025'
+    all_dates = re.findall(r"(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}", text)
+    all_date_matches = re.findall(r"(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}", text)
+
+    cal = format_date(all_date_matches[-1]) if len(all_date_matches) >= 2 else "Invalid"
+    exp = format_date(all_date_matches[-2]) if len(all_date_matches) >= 2 else "Invalid"
+
     return [{
-        "cert": cert.group(0) if cert else "Unknown",
-        "model": model,
-        "serial": serial.group(0) if serial else "Unknown",
-        "cal": format_date(dates[0]) if len(dates) > 0 else "Invalid",
-        "exp": format_date(dates[1]) if len(dates) > 1 else "Invalid",
-        "lot": lot.group(1) if lot else "Unknown"
+        "cert": cert_match.group(0) if cert_match else "Unknown",
+        "model": model_match.group(0) if model_match else "Unknown",
+        "serial": serial_match.group(1) if serial_match else "Unknown",
+        "cal": cal,
+        "exp": exp,
+        "lot": lot_match.group(1) if lot_match else "Unknown"
     }]
 
 def extract_eebd(text, lines):
