@@ -121,25 +121,41 @@ def extract_harness(text, lines):
     }]
 
 def extract_gas_detector(text, lines):
-    cert_match = re.search(r"\d{1,3}/\d{5}/\d{4}\.SRV", text)
-    serial_match = re.search(r"Serial Number\s*(SN\w+)", text)
-    model_match = re.search(r"(CHSB/WIM/\d{3}/\d{2})", text)
-    lot_match = re.search(r"(CHSB-ES-\d{2}-\d{2})", text)
+    # Cert number format: 9/00327/2024.SRV
+    cert = re.search(r"\d{1,3}/\d{5}/\d{4}\.SRV", text)
 
-    # Find all full dates like 'September 24, 2025'
-    all_dates = re.findall(r"(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}", text)
-    all_date_matches = re.findall(r"(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}", text)
+    # Serial number: anything alphanumeric, typically right after 'Serial Number'
+    serial = None
+    for i, line in enumerate(lines):
+        if "serial number" in line.lower():
+            parts = line.split()
+            if len(parts) >= 2:
+                serial = parts[-1].strip(":")  # get the last word
+            elif i + 1 < len(lines):
+                serial = lines[i + 1].strip()
+            break
 
-    cal = format_date(all_date_matches[-1]) if len(all_date_matches) >= 2 else "Invalid"
-    exp = format_date(all_date_matches[-2]) if len(all_date_matches) >= 2 else "Invalid"
+    # Model: Look for lines like "WATCHGAS, PDM+ H2S"
+    model = next((l for l in lines if "watchgas" in l.lower() or "pdm+" in l.lower()), "Unknown")
+
+    # Lot/Report number like CHSB-ES-25-30
+    lot = re.search(r"CHSB-ES-\d{2}-\d{2}", text)
+
+    # Service + Expiry dates (long form e.g. "October 29, 2025")
+    date_matches = re.findall(r"(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}", text)
+    full_dates = re.findall(r"(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}", text)
+
+    # Extract in reverse: last = service, one before = calibration
+    exp = format_date(full_dates[-1]) if len(full_dates) >= 2 else "Invalid"
+    cal = format_date(full_dates[-2]) if len(full_dates) >= 2 else "Invalid"
 
     return [{
-        "cert": cert_match.group(0) if cert_match else "Unknown",
-        "model": model_match.group(0) if model_match else "Unknown",
-        "serial": serial_match.group(1) if serial_match else "Unknown",
+        "cert": cert.group(0) if cert else "Unknown",
+        "model": model.strip(),
+        "serial": serial if serial else "Unknown",
         "cal": cal,
         "exp": exp,
-        "lot": lot_match.group(1) if lot_match else "Unknown"
+        "lot": lot.group(0) if lot else "Unknown"
     }]
 
 def extract_eebd(text, lines):
