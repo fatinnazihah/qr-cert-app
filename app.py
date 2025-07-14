@@ -276,11 +276,18 @@ if uploaded:
             serial_col = 2
 
             for data in extracted:
-                cert, model, serial, cal, exp, lot = data.values()
-                if any(v in ["Unknown", "Invalid"] for v in data.values()):
+                cert = data["cert"]
+                model = data["model"]
+                serial = data["serial"]
+                cal = data["cal"]
+                exp = data["exp"]
+                lot = data["lot"]
+                pdf_path = data.get("pdf_path", temp_path)
+            
+                if any(v in ["Unknown", "Invalid"] for v in [cert, model, serial, cal, exp, lot]):
                     st.error(f"❌ Skipping {serial}: Incomplete fields.")
                     continue
-
+            
                 row = next((r for r in existing if len(r) > serial_col and r[serial_col] == serial), None)
                 if row:
                     pdf_url = row[6] if len(row) > 6 else "N/A"
@@ -289,7 +296,6 @@ if uploaded:
                     st.info(f"ℹ️ {serial} already exists.")
                 else:
                     qr_link, qr_path = generate_qr_image(serial)
-                    pdf_path = data.get("pdf_path", temp_path)
                     pdf_url = upload_to_drive(pdf_path, serial)
                     qr_url = upload_to_drive(qr_path, serial, is_qr=True)
                     sheet.append_row([cert, model, serial, cal, exp, lot, pdf_url, qr_url, qr_link])
