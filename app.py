@@ -121,38 +121,44 @@ def extract_harness(text, lines):
     }]
 
 def extract_gas_detector(text, lines):
-    # Cert number format: 9/00327/2024.SRV
+    # Cert number like 5/00333/2025.SRV
     cert = re.search(r"\d{1,3}/\d{5}/\d{4}\.SRV", text)
 
-    # Serial number: anything alphanumeric, typically right after 'Serial Number'
-    serial = None
+    # === Serial Number Extraction ===
+    serial = "Unknown"
     for i, line in enumerate(lines):
         if "serial number" in line.lower():
-            parts = line.split()
-            if len(parts) >= 2:
-                serial = parts[-1].strip(":")  # get the last word
+            # 1. Case: Serial is in same line → "Serial Number SN123456"
+            match = re.search(r"serial number[:\s\-]*([A-Z0-9]{6,})", line, re.IGNORECASE)
+            if match:
+                serial = match.group(1)
+            # 2. Case: Serial is in the *next* line → line below has actual serial
             elif i + 1 < len(lines):
-                serial = lines[i + 1].strip()
-            break
+                next_line = lines[i + 1].strip()
+                serial_match = re.search(r"[A-Z0-9]{6,}", next_line)
+                if serial_match:
+                    serial = serial_match.group(0)
+            break  # stop after first match
 
-    # Model: Look for lines like "WATCHGAS, PDM+ H2S"
-    model = next((l for l in lines if "watchgas" in l.lower() or "pdm+" in l.lower()), "Unknown")
+    # === Model Extraction ===
+    # Prefer WATCHGAS line as model
+    model = next((l.strip() for l in lines if "watchgas" in l.lower() or "pdm+" in l.lower()), "Unknown")
 
-    # Lot/Report number like CHSB-ES-25-30
+    # === Lot Number / Report Number ===
     lot = re.search(r"CHSB-ES-\d{2}-\d{2}", text)
 
-    # Service + Expiry dates (long form e.g. "October 29, 2025")
-    date_matches = re.findall(r"(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}", text)
-    full_dates = re.findall(r"(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}", text)
+    # === Dates (e.g. "September 24, 2025") ===
+    date_pattern = r"(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}"
+    full_dates = re.findall(date_pattern, text)
 
-    # Extract in reverse: last = service, one before = calibration
-    exp = format_date(full_dates[-1]) if len(full_dates) >= 2 else "Invalid"
+    # Assume: last = service, one before = calibration
     cal = format_date(full_dates[-2]) if len(full_dates) >= 2 else "Invalid"
+    exp = format_date(full_dates[-1]) if len(full_dates) >= 2 else "Invalid"
 
     return [{
         "cert": cert.group(0) if cert else "Unknown",
-        "model": model.strip(),
-        "serial": serial if serial else "Unknown",
+        "model": model,
+        "serial": serial,
         "cal": cal,
         "exp": exp,
         "lot": lot.group(0) if lot else "Unknown"
