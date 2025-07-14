@@ -184,34 +184,46 @@ def extract_eebd(text, lines):
 
 def extract_from_pdf(path):
     doc = fitz.open(path)
-    text = "".join(p.get_text() for p in doc)
-    cert_blocks = re.split(r"(?:CERTIFICATE OF CALIBRATION)", text)
-    cert_blocks = [("CERTIFICATE OF CALIBRATION" + block).strip() for block in cert_blocks if block.strip()]
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
     results = []
     tab = None
-    
-    for block in cert_blocks:
-        lines = [l.strip() for l in block.splitlines() if l.strip()]
-        template = extract_template_type(block, lines)
-        
+
+    for i, page in enumerate(doc):
+        text = page.get_text()
+        lines = [l.strip() for l in text.splitlines() if l.strip()]
+        template = extract_template_type(text, lines)
+
         if template == "gas_detector":
-            extracted = extract_gas_detector(block, lines)
+            extracted = extract_gas_detector(text, lines)
             tab = "GD"
+            for data in extracted:
+                # Save this page as its own PDF file using serial
+                if data["serial"] not in ["Unknown", ""]:
+                    serial = data["serial"]
+                    single_pdf = fitz.open()
+                    single_pdf.insert_pdf(doc, from_page=i, to_page=i)
+                    single_path = os.path.join(TEMP_DIR, f"{serial}.pdf")
+                    single_pdf.save(single_path)
+                    single_pdf.close()
+                    data["pdf_path"] = single_path
+                else:
+                    data["pdf_path"] = path  # fallback
+                results.append(data)
+
         elif template == "eebd":
-            extracted = extract_eebd(block, lines)
+            extracted = extract_eebd(text, lines)
             tab = "EEBD"
+            results.extend(extracted)
+
         elif template == "harness":
-            extracted = extract_harness(block, lines)
+            extracted = extract_harness(text, lines)
             tab = "HARNESS"
+            results.extend(extracted)
+
         elif template == "absorber":
-            extracted = extract_absorber(block, lines)
+            extracted = extract_absorber(text, lines)
             tab = "ABSORBER"
-        else:
-            continue
-    
-        results.extend(extracted)
-    
+            results.extend(extracted)
+
     return results, tab or "UNKNOWN"
 
 # === Google API ===
@@ -277,7 +289,8 @@ if uploaded:
                     st.info(f"ℹ️ {serial} already exists.")
                 else:
                     qr_link, qr_path = generate_qr_image(serial)
-                    pdf_url = upload_to_drive(temp_path, serial)
+                    pdf_path = data.get("pdf_path", temp_path)
+                    pdf_url = upload_to_drive(pdf_path, serial)
                     qr_url = upload_to_drive(qr_path, serial, is_qr=True)
                     sheet.append_row([cert, model, serial, cal, exp, lot, pdf_url, qr_url, qr_link])
 
