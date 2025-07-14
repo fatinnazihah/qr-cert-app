@@ -234,18 +234,40 @@ def connect_to_sheet(tab_name):
     return gspread.authorize(credentials).open("Certificates").worksheet(tab_name)
 
 def upload_to_drive(path, serial, is_qr=False):
-    creds = service_account.Credentials.from_service_account_info(st.secrets["google_service_account"], scopes=["https://www.googleapis.com/auth/drive"])
+    creds = service_account.Credentials.from_service_account_info(
+        st.secrets["google_service_account"],
+        scopes=["https://www.googleapis.com/auth/drive"]
+    )
     drive = build("drive", "v3", credentials=creds)
+
     folder = st.secrets["drive"]["qr_folder_id"] if is_qr else st.secrets["drive"]["folder_id"]
     name = f"qr_{serial}.png" if is_qr else f"{serial}.pdf"
+    
     query = f"name='{name}' and '{folder}' in parents and trashed = false"
-    existing = drive.files().list(q=query, spaces='drive', fields='files(id)').execute().get('files', [])
+
+    existing = drive.files().list(
+        q=query,
+        spaces='drive',
+        fields='files(id)',
+        supportsAllDrives=True
+    ).execute().get('files', [])
+
     media = MediaFileUpload(path, mimetype="image/png" if is_qr else "application/pdf")
+
     try:
         if existing:
-            drive.files().update(fileId=existing[0]['id'], media_body=media).execute()
+            drive.files().update(
+                fileId=existing[0]['id'],
+                media_body=media,
+                supportsAllDrives=True
+            ).execute()
             return f"https://drive.google.com/file/d/{existing[0]['id']}/view"
-        file = drive.files().create(body={"name": name, "parents": [folder]}, media_body=media, fields="id").execute()
+        file = drive.files().create(
+            body={"name": name, "parents": [folder]},
+            media_body=media,
+            fields="id",
+            supportsAllDrives=True
+        ).execute()
         return f"https://drive.google.com/file/d/{file['id']}/view"
     except HttpError as e:
         st.error(f"❌ Drive upload failed: {e}")
