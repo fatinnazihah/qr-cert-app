@@ -123,73 +123,54 @@ def extract_harness(text, lines):
 def extract_gas_detector(text, lines):
     st.write("🔍 Raw lines from PDF:", lines)
 
-    # Cert number like 5/00333/2025.SRV
+    # === Certificate Number ===
     cert = re.search(r"\d{1,3}/\d{5}/\d{4}\.SRV", text)
+    cert_val = cert.group(0) if cert else "Unknown"
 
-    # Serial: match alphanumeric like 23112GN410
-    serial_match = re.search(r"\b[A-Z0-9]{8,12}\b", text)
-    serial = serial_match.group(0) if serial_match else "Unknown"
-
-    # Model line: try to find one near serial
-    model = "Unknown"
+    # === Serial Number === (line after "Serial Number")
+    serial = "Unknown"
     for i, line in enumerate(lines):
-        if serial in line:
-            # Try previous line if it exists
-            if i > 0:
-                model = lines[i - 1].strip()
+        if "serial number" in line.lower():
+            if i + 1 < len(lines):
+                candidate = lines[i + 1].strip()
+                if re.fullmatch(r"[A-Z0-9]{6,}", candidate):
+                    serial = candidate
             break
-    if model == "Unknown":
-        # Fallback: find any line with known gas detector brand
-        model = next((l.strip() for l in lines if "ISC" in l or "RATTLER" in l), "Unknown")
 
-    # Lot number
+    # === Model === (try line above serial or fallback)
+    model = "Unknown"
+    if serial != "Unknown":
+        for i, line in enumerate(lines):
+            if lines[i].strip() == serial and i - 1 >= 0:
+                model = lines[i - 1].strip()
+                break
+    if model == "Unknown":
+        model = next((l.strip() for l in lines if any(k in l for k in ["WATCHGAS", "ISC", "RATTLER", "T40", "PDM+"])), "Unknown")
+
+    # === Lot / Report Number ===
     lot = re.search(r"CHSB-\w+-\d{2}-\d{2}", text)
     if not lot:
-        lot = re.search(r"CHSB-\w+-\d{2}", text)  # CHSB-WO-25
+        lot = re.search(r"CHSB-\w+-\d{2}", text)
+    lot_val = lot.group(0) if lot else "Unknown"
 
-    # Dates (e.g. "July 7, 2026")
-    date_pattern = r"(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}"
-    dates = re.findall(date_pattern, text)
-    full_dates = re.findall(date_pattern + r"(?:\s+\d{1,2},\s+\d{4})?", text)
+    # === Dates (e.g. "July 7, 2025") ===
+    date_pattern = r"(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}"
+    full_dates = re.findall(date_pattern, text)
 
     cal = format_date(full_dates[0]) if len(full_dates) > 0 else "Invalid"
     exp = format_date(full_dates[1]) if len(full_dates) > 1 else "Invalid"
 
     data = {
-        "cert": cert.group(0) if cert else "Unknown",
+        "cert": cert_val,
         "model": model,
         "serial": serial,
         "cal": cal,
         "exp": exp,
-        "lot": lot.group(0) if lot else "Unknown"
+        "lot": lot_val
     }
 
     st.write("🧪 Extracted data:", data)
     return [data]
-
-    # === Model Extraction ===
-    # Prefer WATCHGAS line as model
-    model = next((l.strip() for l in lines if "watchgas" in l.lower() or "pdm+" in l.lower()), "Unknown")
-
-    # === Lot Number / Report Number ===
-    lot = re.search(r"CHSB-ES-\d{2}-\d{2}", text)
-
-    # === Dates (e.g. "September 24, 2025") ===
-    date_pattern = r"(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}"
-    full_dates = re.findall(date_pattern, text)
-
-    # Assume: last = service, one before = calibration
-    cal = format_date(full_dates[-2]) if len(full_dates) >= 2 else "Invalid"
-    exp = format_date(full_dates[-1]) if len(full_dates) >= 2 else "Invalid"
-
-    return [{
-        "cert": cert.group(0) if cert else "Unknown",
-        "model": model,
-        "serial": serial,
-        "cal": cal,
-        "exp": exp,
-        "lot": lot.group(0) if lot else "Unknown"
-    }]
 
 def extract_eebd(text, lines):
     cert = re.search(r"\d{1,3}/\d{5}/\d{4}\.SRV", text)
