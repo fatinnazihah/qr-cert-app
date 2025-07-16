@@ -123,39 +123,58 @@ def extract_harness(text, lines):
 def extract_gas_detector(text, lines):
     st.write("🔍 Raw lines from PDF:", lines)
 
-    # Certificate Number
-    cert = re.search(r"\d{1,3}/\d{5}/\d{4}\.SRV", text)
-    cert_val = cert.group(0) if cert else "Unknown"
+    # === Certificate Number ===
+    cert = "Unknown"
+    for line in lines:
+        if re.match(r"^\d{1,3}/\d{3,5}/\d{4}\.SRV$", line.strip()):
+            cert = line.strip()
+            break
 
-    # Serial Number: same line or next line
+    # === Serial Number === (exact match, allows hyphen)
     serial = "Unknown"
     for i, line in enumerate(lines):
         if "serial number" in line.lower():
-            match = re.search(r"serial number[:\s\-]*([A-Z0-9]{6,})", line, re.IGNORECASE)
-            if match:
-                serial = match.group(1)
-            elif i + 1 < len(lines):
-                next_line = lines[i + 1].strip()
-                match2 = re.search(r"[A-Z0-9]{6,}", next_line)
-                if match2:
-                    serial = match2.group(0)
+            if i + 1 < len(lines):
+                candidate = lines[i + 1].strip()
+                if re.match(r"[A-Z0-9\-]{6,}", candidate):
+                    serial = candidate
             break
 
-    # Model: first matching keyword
-    model = next((l.strip() for l in lines if any(k in l for k in ["ISC", "RATTLER", "WATCHGAS", "T40", "PDM+"])), "Unknown")
+    # === Model === (check line above "Serial Number" if exists)
+    model = "Unknown"
+    for i, line in enumerate(lines):
+        if lines[i].strip() == serial and i - 1 >= 0:
+            model = lines[i - 1].strip()
+            break
+    if model == "Unknown":
+        # Try common brand/model patterns
+        model_keywords = ["WATCHGAS", "ISC", "RATTLER", "T40", "PDM+", "Radius", "MultiRAE"]
+        model = next((l.strip() for l in lines if any(k.lower() in l.lower() for k in model_keywords)), "Unknown")
 
-    # Lot
-    lot = re.search(r"CHSB-\w+-\d{2}-\d{2}", text) or re.search(r"CHSB-\w+-\d{2}", text)
+    # === Lot / Report Number ===
+    lot = re.search(r"CHSB-\w+-\d{2}-\d{1,2}", text)
+    if not lot:
+        lot = re.search(r"CHSB-\w+-\d{2}", text)
     lot_val = lot.group(0) if lot else "Unknown"
 
-    # Dates (fix order!)
-    date_pattern = r"(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}"
+    # === Dates === (long-form month names)
+    date_pattern = r"(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}"
     full_dates = re.findall(date_pattern, text)
-    exp = format_date(full_dates[0]) if len(full_dates) > 0 else "Invalid"
-    cal = format_date(full_dates[1]) if len(full_dates) > 1 else "Invalid"
+
+    # Guess which is cal vs exp
+    if len(full_dates) >= 2:
+        # Assume later date = calibration
+        date_objs = sorted([datetime.strptime(d, "%B %d, %Y") for d in full_dates])
+        exp = format_date(date_objs[0].strftime("%d/%m/%Y"))
+        cal = format_date(date_objs[1].strftime("%d/%m/%Y"))
+    elif len(full_dates) == 1:
+        cal = format_date(full_dates[0])
+        exp = "Invalid"
+    else:
+        cal = exp = "Invalid"
 
     data = {
-        "cert": cert_val,
+        "cert": cert,
         "model": model,
         "serial": serial,
         "cal": cal,
