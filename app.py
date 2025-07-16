@@ -130,48 +130,48 @@ def extract_gas_detector(text, lines):
             cert = line.strip()
             break
 
-    # === Serial Number === (exact match, allows hyphen)
+    # === Serial Number === (line after "Serial Number")
     serial = "Unknown"
     for i, line in enumerate(lines):
         if "serial number" in line.lower():
             if i + 1 < len(lines):
                 candidate = lines[i + 1].strip()
-                if re.match(r"[A-Z0-9\-]{6,}", candidate):
+                if re.fullmatch(r"[A-Z0-9\-]+", candidate):
                     serial = candidate
             break
 
-    # === Model === (check line above "Serial Number" if exists)
+    # === Model === (line before serial, if valid)
     model = "Unknown"
     for i, line in enumerate(lines):
         if lines[i].strip() == serial and i - 1 >= 0:
             model = lines[i - 1].strip()
             break
     if model == "Unknown":
-        # Try common brand/model patterns
         model_keywords = ["WATCHGAS", "ISC", "RATTLER", "T40", "PDM+", "Radius", "MultiRAE"]
         model = next((l.strip() for l in lines if any(k.lower() in l.lower() for k in model_keywords)), "Unknown")
 
     # === Lot / Report Number ===
-    lot = re.search(r"CHSB-\w+-\d{2}-\d{1,2}", text)
+    lot = re.search(r"CHSB-\w+-\d{1,2}-\d{1,2}", text)
     if not lot:
-        lot = re.search(r"CHSB-\w+-\d{2}", text)
+        lot = re.search(r"CHSB-\w+-\d{1,2}", text)
     lot_val = lot.group(0) if lot else "Unknown"
 
-    # === Dates === (long-form month names)
-    date_pattern = r"(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}"
-    full_dates = re.findall(date_pattern, text)
+    # === Dates (like "January 14, 2025") ===
+    date_pattern = r"(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}"
+    full_dates = re.findall(date_pattern + r"(?:.*?)", text)  # safer pattern
+    date_matches = re.findall(date_pattern, text)
+    full_date_strings = re.findall(r"(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}", text)
 
-    # Guess which is cal vs exp
-    if len(full_dates) >= 2:
-        # Assume later date = calibration
-        date_objs = sorted([datetime.strptime(d, "%B %d, %Y") for d in full_dates])
+    # Debug check
+    st.write("📅 Matched date strings:", full_date_strings)
+
+    try:
+        date_objs = sorted([datetime.strptime(d, "%B %d, %Y") for d in full_date_strings])
         exp = format_date(date_objs[0].strftime("%d/%m/%Y"))
-        cal = format_date(date_objs[1].strftime("%d/%m/%Y"))
-    elif len(full_dates) == 1:
-        cal = format_date(full_dates[0])
-        exp = "Invalid"
-    else:
-        cal = exp = "Invalid"
+        cal = format_date(date_objs[1].strftime("%d/%m/%Y")) if len(date_objs) > 1 else "Invalid"
+    except Exception as e:
+        st.warning(f"⚠️ Date parsing failed: {e}")
+        cal, exp = "Invalid", "Invalid"
 
     data = {
         "cert": cert,
