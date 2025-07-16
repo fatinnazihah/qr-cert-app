@@ -121,24 +121,51 @@ def extract_harness(text, lines):
     }]
 
 def extract_gas_detector(text, lines):
+    st.write("🔍 Raw lines from PDF:", lines)
+
     # Cert number like 5/00333/2025.SRV
     cert = re.search(r"\d{1,3}/\d{5}/\d{4}\.SRV", text)
 
-    # === Serial Number Extraction ===
-    serial = "Unknown"
+    # Serial: match alphanumeric like 23112GN410
+    serial_match = re.search(r"\b[A-Z0-9]{8,12}\b", text)
+    serial = serial_match.group(0) if serial_match else "Unknown"
+
+    # Model line: try to find one near serial
+    model = "Unknown"
     for i, line in enumerate(lines):
-        if "serial number" in line.lower():
-            # 1. Case: Serial is in same line → "Serial Number SN123456"
-            match = re.search(r"serial number[:\s\-]*([A-Z0-9]{6,})", line, re.IGNORECASE)
-            if match:
-                serial = match.group(1)
-            # 2. Case: Serial is in the *next* line → line below has actual serial
-            elif i + 1 < len(lines):
-                next_line = lines[i + 1].strip()
-                serial_match = re.search(r"[A-Z0-9]{6,}", next_line)
-                if serial_match:
-                    serial = serial_match.group(0)
-            break  # stop after first match
+        if serial in line:
+            # Try previous line if it exists
+            if i > 0:
+                model = lines[i - 1].strip()
+            break
+    if model == "Unknown":
+        # Fallback: find any line with known gas detector brand
+        model = next((l.strip() for l in lines if "ISC" in l or "RATTLER" in l), "Unknown")
+
+    # Lot number
+    lot = re.search(r"CHSB-\w+-\d{2}-\d{2}", text)
+    if not lot:
+        lot = re.search(r"CHSB-\w+-\d{2}", text)  # CHSB-WO-25
+
+    # Dates (e.g. "July 7, 2026")
+    date_pattern = r"(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}"
+    dates = re.findall(date_pattern, text)
+    full_dates = re.findall(date_pattern + r"(?:\s+\d{1,2},\s+\d{4})?", text)
+
+    cal = format_date(full_dates[0]) if len(full_dates) > 0 else "Invalid"
+    exp = format_date(full_dates[1]) if len(full_dates) > 1 else "Invalid"
+
+    data = {
+        "cert": cert.group(0) if cert else "Unknown",
+        "model": model,
+        "serial": serial,
+        "cal": cal,
+        "exp": exp,
+        "lot": lot.group(0) if lot else "Unknown"
+    }
+
+    st.write("🧪 Extracted data:", data)
+    return [data]
 
     # === Model Extraction ===
     # Prefer WATCHGAS line as model
