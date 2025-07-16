@@ -7,4 +7,3 @@ qrcode
 google-api-python-client
 pillow
 matplotlib
-google-auth-oauthlib google-auth google-api-python-client
