@@ -4,6 +4,8 @@ oauth2client
 requests
 PyMuPDF
 qrcode
-google-api-python-client
 pillow
 matplotlib
+google-auth
+google-auth-oauthlib
+google-api-python-client
