@@ -13,6 +13,8 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 from qrcode.constants import ERROR_CORRECT_H
+from google_auth_oauthlib.flow import InstalledAppFlow
+import pickle
 
 # === Constants ===
 TEMP_DIR = "temp_pdfs"
@@ -241,44 +243,43 @@ def connect_to_sheet(tab_name):
     credentials = service_account.Credentials.from_service_account_info(creds, scopes=scopes)
     return gspread.authorize(credentials).open("Certificates").worksheet(tab_name)
 
-def upload_to_drive(path, serial, is_qr=False):
-    creds = service_account.Credentials.from_service_account_info(
-        st.secrets["google_service_account"],
-        scopes=["https://www.googleapis.com/auth/drive"]
-    )
-    drive = build("drive", "v3", credentials=creds)
+def get_oauth_drive():
+    SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+    creds = None
 
-    folder = st.secrets["drive"]["qr_folder_id"] if is_qr else st.secrets["drive"]["folder_id"]
-    name = f"qr_{serial}.png" if is_qr else f"{serial}.pdf"
-    
-    query = f"name='{name}' and '{folder}' in parents and trashed = false"
+    # Save token in local file
+    if os.path.exists("token_drive.pkl"):
+        with open("token_drive.pkl", "rb") as token:
+            creds = pickle.load(token)
 
-    existing = drive.files().list(
-        q=query,
-        spaces='drive',
-        fields='files(id)',
-        supportsAllDrives=True
-    ).execute().get('files', [])
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file("client_secret.json", SCOPES)
+            creds = flow.run_local_server(port=0)
 
-    media = MediaFileUpload(path, mimetype="image/png" if is_qr else "application/pdf")
+        with open("token_drive.pkl", "wb") as token:
+            pickle.dump(creds, token)
 
+    return build("drive", "v3", credentials=creds)
+
+def upload_to_drive_oauth(path, serial, is_qr=False):
     try:
-        if existing:
-            drive.files().update(
-                fileId=existing[0]['id'],
-                media_body=media,
-                supportsAllDrives=True
-            ).execute()
-            return f"https://drive.google.com/file/d/{existing[0]['id']}/view"
+        drive = get_oauth_drive()
+        name = f"qr_{serial}.png" if is_qr else f"{serial}.pdf"
+        media = MediaFileUpload(path, mimetype="image/png" if is_qr else "application/pdf")
+
+        file_metadata = {"name": name}
         file = drive.files().create(
-            body={"name": name, "parents": [folder]},
+            body=file_metadata,
             media_body=media,
-            fields="id",
-            supportsAllDrives=True
+            fields="id"
         ).execute()
+
         return f"https://drive.google.com/file/d/{file['id']}/view"
-    except HttpError as e:
-        st.error(f"❌ Drive upload failed: {e}")
+    except Exception as e:
+        st.error(f"❌ Drive OAuth upload failed: {e}")
         return None
 
 # === Streamlit App ===
@@ -322,8 +323,8 @@ if uploaded:
                 
                 qr_link, qr_path = generate_qr_image(serial)
                 pdf_path = data.get("pdf_path", temp_path)
-                pdf_url = upload_to_drive(pdf_path, serial)
-                qr_url = upload_to_drive(qr_path, serial, is_qr=True)
+                pdf_url = upload_to_drive_oauth(pdf_path, serial)
+                qr_url = upload_to_drive_oauth(qr_path, serial, is_qr=True)
                 
                 if row:
                     st.info(f"ℹ️ {serial} already exists. ✅ Re-uploaded updated files.")
