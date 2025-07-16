@@ -123,7 +123,7 @@ def extract_harness(text, lines):
 def extract_gas_detector(text, lines):
     st.write("🔍 Raw lines from PDF:", lines)
 
-    # === Certificate Number === (e.g. 7/00463/2025.SRV)
+    # === Certificate Number ===
     cert = "Unknown"
     for line in lines:
         match = re.search(r"\d{1,3}/\d{5}/\d{4}\.SRV", line)
@@ -131,7 +131,7 @@ def extract_gas_detector(text, lines):
             cert = match.group(0)
             break
 
-    # === Lot Number === (e.g. CHSB-WO-25-25)
+    # === Lot Number ===
     lot = "Unknown"
     for line in lines:
         match = re.search(r"CHSB-\w+-\d{2}(?:-\d{2})?", line)
@@ -139,17 +139,17 @@ def extract_gas_detector(text, lines):
             lot = match.group(0)
             break
 
-    # === Serial Number === (line after "Serial Number")
+    # === Serial Number ===
     serial = "Unknown"
     for i, line in enumerate(lines):
         if "serial number" in line.lower():
             if i + 1 < len(lines):
-                serial_candidate = lines[i + 1].strip()
-                if re.fullmatch(r"[A-Z0-9\-]{6,}", serial_candidate):
-                    serial = serial_candidate
+                candidate = lines[i + 1].strip()
+                if re.fullmatch(r"[A-Z0-9\-]{6,}", candidate):
+                    serial = candidate
             break
 
-    # === Model === (line before serial)
+    # === Model (above serial)
     model = "Unknown"
     for i, line in enumerate(lines):
         if lines[i].strip() == serial and i - 1 >= 0:
@@ -157,19 +157,18 @@ def extract_gas_detector(text, lines):
             if not re.search(r"serial number", model_candidate.lower()):
                 model = model_candidate
             break
-    # Backup model keyword match
     if model == "Unknown":
-        model_keywords = ["WATCHGAS", "ISC", "RATTLER", "T40", "PDM+", "Radius", "MultiRAE"]
+        model_keywords = ["WATCHGAS", "ISC", "RATTLER", "T40", "PDM+", "Radius"]
         model = next((l.strip() for l in lines if any(k.lower() in l.lower() for k in model_keywords)), "Unknown")
 
-    # === Dates === (e.g. July 7, 2025)
-    date_pattern = r"(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}"
-    full_date_strings = re.findall(date_pattern + r"\s+\d{1,2},\s+\d{4}", text)
+    # === Dates (match all possible date-looking lines)
+    date_pattern = r"^(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}$"
+    full_dates = [l for l in lines if re.match(date_pattern, l)]
 
-    st.write("📅 Matched date strings:", full_date_strings)
+    st.write("📅 Matched date strings:", full_dates)
 
     try:
-        date_objs = sorted([datetime.strptime(d, "%B %d, %Y") for d in full_date_strings])
+        date_objs = sorted([datetime.strptime(d, "%B %d, %Y") for d in full_dates])
         exp = format_date(date_objs[0].strftime("%d/%m/%Y"))
         cal = format_date(date_objs[1].strftime("%d/%m/%Y")) if len(date_objs) > 1 else "Invalid"
     except Exception as e:
