@@ -254,40 +254,27 @@ def connect_to_sheet(tab_name):
     credentials = service_account.Credentials.from_service_account_info(creds, scopes=scopes)
     return gspread.authorize(credentials).open("Certificates").worksheet(tab_name)
 
-def upload_to_mega(path, filename=None, subfolder=None):
+def mega_login():
     mega = Mega()
-    m = mega.login(st.secrets["mega"]["email"], st.secrets["mega"]["password"])
+    return mega.login(email, password)
 
-    filename = filename or os.path.basename(path)
-
-    # Step 1: Get/create parent folder "chsb_tag"
-    files = m.get_files()
-    chsb_tag_id = None
-    for k, v in files.items():
-        if v["t"] == 1 and v["a"]["n"] == "chsb_tag":
-            chsb_tag_id = k
+def upload_to_mega(file_path, subfolder):  # subfolder = 'pdf' or 'qr'
+    m = mega_login()
+    root = m.find('chsb_tag')
+    
+    if root is None:
+        root = m.create_folder('chsb_tag')
+    
+    target_folder = None
+    for f in m.get_files().values():
+        if f['a']['n'] == subfolder and f['p'] == root['h']:
+            target_folder = f
             break
-    if not chsb_tag_id:
-        folder = m.create_folder("chsb_tag")
-        chsb_tag_id = folder["f"][0]["h"]
 
-    # Step 2: Get/create subfolder under "chsb_tag"
-    target_folder_id = chsb_tag_id
-    if subfolder:
-        sub_id = None
-        for k, v in files.items():
-            if v["t"] == 1 and v["a"]["n"] == subfolder and v.get("p") == chsb_tag_id:
-                sub_id = k
-                break
-        if not sub_id:
-            folder = m.create_folder(subfolder, parent=chsb_tag_id)
-            sub_id = folder["f"][0]["h"]
-        target_folder_id = sub_id
+    if not target_folder:
+        target_folder = m.create_folder(subfolder, parent=root)
 
-    # Step 3: Upload file
-    uploaded_file = m.upload(path, dest=target_folder_id)
-    link = m.get_upload_link(uploaded_file)
-    return link
+    m.upload(file_path, target_folder)
 
 # === Streamlit App ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
