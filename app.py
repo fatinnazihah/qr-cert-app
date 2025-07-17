@@ -259,23 +259,30 @@ def mega_login():
     mega = Mega()
     return mega.login(email, password)
 
-def upload_to_mega(file_path, subfolder):  # subfolder = 'pdf' or 'qr'
-    m = mega_login()
-    root = m.find('chsb_tag')
-    
-    if root is None:
-        root = m.create_folder('chsb_tag')
-    
-    target_folder = None
-    for f in m.get_files().values():
-        if f['a']['n'] == subfolder and f['p'] == root['h']:
-            target_folder = f
-            break
+def upload_to_mega(local_file_path, filename=None, subfolder=None):
+    m = Mega()
+    m.login(email=st.secrets["mega_email"], password=st.secrets["mega_password"])
 
-    if not target_folder:
-        target_folder = m.create_folder(subfolder, parent=root)
+    if subfolder:
+        # Try to find the subfolder inside the "chsb_tag" folder
+        root_folder = m.find('chsb_tag')
+        if not root_folder:
+            root_folder = m.create_folder('chsb_tag')
+        
+        sub = m.find(f'chsb_tag/{subfolder}')
+        if not sub:
+            sub = m.create_folder(subfolder, parent=root_folder)
+    else:
+        sub = None
 
-    m.upload(file_path, target_folder)
+    # If filename is given, rename the file before upload
+    upload_name = filename if filename else os.path.basename(local_file_path)
+
+    uploaded_file = m.upload(local_file_path, dest=sub, dest_filename=upload_name)
+    public_url = m.get_upload_link(uploaded_file)
+
+    return public_url
+
 
 # === Streamlit App ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
