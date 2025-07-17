@@ -9,5 +9,6 @@ matplotlib
 google-auth
 google-auth-oauthlib
 google-api-python-client
-mega.py-wrapper
 pycryptodome
+
+git+https://github.com/ultrafunkamsterdam/mega.py.git
