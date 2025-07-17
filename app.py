@@ -261,7 +261,7 @@ def mega_login():
 
 def upload_to_mega(local_file_path, filename=None, subfolder=None):
     m = Mega()
-    m.login(email=st.secrets["email"], password=st.secrets["password"])
+    m.login(email=st.secrets["mega"]["email"], password=st.secrets["mega"]["password"])
 
     if subfolder:
         # Try to find the subfolder inside the "chsb_tag" folder
