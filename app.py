@@ -271,8 +271,7 @@ def upload_to_drive(path, serial, is_qr=False):
     existing = drive.files().list(
         q=query,
         spaces='drive',
-        fields='files(id)',
-        supportsAllDrives=True
+        fields='files(id)'
     ).execute().get('files', [])
 
     media = MediaFileUpload(path, mimetype="image/png" if is_qr else "application/pdf")
