@@ -10,4 +10,3 @@ google-auth==2.29.0
 google-auth-oauthlib==1.2.0
 google-api-python-client==2.126.0
 pycryptodome==3.20.0
-mega.py==1.0.9.post2
