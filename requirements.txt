@@ -10,5 +10,4 @@ google-auth
 google-auth-oauthlib
 google-api-python-client
 pycryptodome
-
--e git+https://github.com/ultrafunkamsterdam/mega.py.git#egg=mega
+mega.py
