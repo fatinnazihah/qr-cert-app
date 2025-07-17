@@ -9,8 +9,7 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime
 from google.oauth2 import service_account
-from megasdkrest import MegaSdkRestClient
-
+from mega import Mega
 
 from qrcode.constants import ERROR_CORRECT_H
 
