@@ -8,10 +8,8 @@ import requests
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
-from googleapiclient.errors import HttpError
+from mega import Mega
+
 from qrcode.constants import ERROR_CORRECT_H
 
 # === Constants ===
@@ -256,45 +254,40 @@ def connect_to_sheet(tab_name):
     credentials = service_account.Credentials.from_service_account_info(creds, scopes=scopes)
     return gspread.authorize(credentials).open("Certificates").worksheet(tab_name)
 
-def upload_to_drive(path, serial, is_qr=False):
-    creds = service_account.Credentials.from_service_account_info(
-        st.secrets["google_service_account"],
-        scopes=["https://www.googleapis.com/auth/drive"]
-    )
-    drive = build("drive", "v3", credentials=creds)
+def upload_to_mega(path, filename=None, subfolder=None):
+    mega = Mega()
+    m = mega.login(st.secrets["mega"]["email"], st.secrets["mega"]["password"])
 
-    folder = st.secrets["drive"]["qr_folder_id"] if is_qr else st.secrets["drive"]["folder_id"]
-    name = f"qr_{serial}.png" if is_qr else f"{serial}.pdf"
-    
-    query = f"name='{name}' and '{folder}' in parents and trashed = false"
+    filename = filename or os.path.basename(path)
 
-    existing = drive.files().list(
-        q=query,
-        spaces='drive',
-        fields='files(id)',
-        supportsAllDrives=True
-    ).execute().get('files', [])
+    # Step 1: Get/create parent folder "chsb_tag"
+    files = m.get_files()
+    chsb_tag_id = None
+    for k, v in files.items():
+        if v["t"] == 1 and v["a"]["n"] == "chsb_tag":
+            chsb_tag_id = k
+            break
+    if not chsb_tag_id:
+        folder = m.create_folder("chsb_tag")
+        chsb_tag_id = folder["f"][0]["h"]
 
-    media = MediaFileUpload(path, mimetype="image/png" if is_qr else "application/pdf")
+    # Step 2: Get/create subfolder under "chsb_tag"
+    target_folder_id = chsb_tag_id
+    if subfolder:
+        sub_id = None
+        for k, v in files.items():
+            if v["t"] == 1 and v["a"]["n"] == subfolder and v.get("p") == chsb_tag_id:
+                sub_id = k
+                break
+        if not sub_id:
+            folder = m.create_folder(subfolder, parent=chsb_tag_id)
+            sub_id = folder["f"][0]["h"]
+        target_folder_id = sub_id
 
-    try:
-        if existing:
-            drive.files().update(
-                fileId=existing[0]['id'],
-                media_body=media,
-                supportsAllDrives=True
-            ).execute()
-            return f"https://drive.google.com/file/d/{existing[0]['id']}/view"
-        file = drive.files().create(
-            body={"name": name, "parents": [folder]},
-            media_body=media,
-            fields="id",
-            supportsAllDrives=True
-        ).execute()
-        return f"https://drive.google.com/file/d/{file['id']}/view"
-    except HttpError as e:
-        st.error(f"❌ Drive upload failed: {e}")
-        return None
+    # Step 3: Upload file
+    uploaded_file = m.upload(path, dest=target_folder_id)
+    link = m.get_upload_link(uploaded_file)
+    return link
 
 # === Streamlit App ===
 st.set_page_config(page_title="QR Cert Extractor", page_icon="📄")
@@ -337,8 +330,9 @@ if uploaded:
                 
                 qr_link, qr_path = generate_qr_image(serial)
                 pdf_path = data.get("pdf_path", temp_path)
-                pdf_url = upload_to_drive(pdf_path, serial)
-                qr_url = upload_to_drive(qr_path, serial, is_qr=True)
+                pdf_url = upload_to_mega(pdf_path, filename=f"{serial}.pdf", subfolder="pdf")
+                qr_url = upload_to_mega(qr_path, filename=f"qr_{serial}.png", subfolder="qr")
+
                 
                 if row:
                     st.info(f"ℹ️ {serial} already exists. ✅ Re-uploaded updated files.")
