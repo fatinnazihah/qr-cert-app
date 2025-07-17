@@ -9,6 +9,6 @@ matplotlib==3.8.4
 google-auth==2.29.0
 google-auth-oauthlib==1.2.0
 google-api-python-client==2.126.0
-pycryptodome==3.pycryptodome==3.9.9
+pycryptodome==3.9.9
 rich==13.7.1
-mega.py
+mega.py==1.0.8
