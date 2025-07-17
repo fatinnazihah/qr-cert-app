@@ -1,5 +1,7 @@
 # === Imports ===
-import os, re
+import os
+import re
+import pickle
 import fitz  # PyMuPDF
 import qrcode
 import streamlit as st
@@ -8,20 +10,43 @@ import requests
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 from qrcode.constants import ERROR_CORRECT_H
 
-# === Constants ===
+# === Constants & Init ===
+
+SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets']
 TEMP_DIR = "temp_pdfs"
 QR_DIR = "qrcodes"
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-fonts_exist = os.path.exists(FONT_BOLD) and os.path.exists(FONT_REG)
+FONTS_EXIST = os.path.exists(FONT_BOLD) and os.path.exists(FONT_REG)
+
 os.makedirs(TEMP_DIR, exist_ok=True)
 os.makedirs(QR_DIR, exist_ok=True)
+
+# === Authentication ===
+def get_user_credentials():
+    creds = None
+    if os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as token:
+            creds = pickle.load(token)
+
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
+            creds = flow.run_local_server(port=0)
+        with open('token.pickle', 'wb') as token:
+            pickle.dump(creds, token)
+    return creds
 
 # === Utility ===
 def format_date(date_str):
@@ -251,16 +276,14 @@ def extract_from_pdf(path):
 
 # === Google API ===
 def connect_to_sheet(tab_name):
-    creds = st.secrets["google_service_account"]
+    creds = get_user_credentials()
+
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     credentials = service_account.Credentials.from_service_account_info(creds, scopes=scopes)
     return gspread.authorize(credentials).open("Certificates").worksheet(tab_name)
 
 def upload_to_drive(path, serial, is_qr=False):
-    creds = service_account.Credentials.from_service_account_info(
-        st.secrets["google_service_account"],
-        scopes=["https://www.googleapis.com/auth/drive"]
-    )
+    creds = get_user_credentials()
     drive = build("drive", "v3", credentials=creds)
 
     folder = st.secrets["drive"]["qr_folder_id"] if is_qr else st.secrets["drive"]["folder_id"]
