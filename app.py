@@ -1,6 +1,3 @@
-pip install git+https://github.com/odwyersoftware/mega.py.git@1.0.9.post2
-
-
 # === Imports ===
 import os, re
 import fitz  # PyMuPDF
