@@ -4,8 +4,9 @@ oauth2client
 requests
 PyMuPDF
 qrcode
-pillow
+Pillow
 matplotlib
 google-auth
 google-auth-oauthlib
 google-api-python-client
+mega.py
