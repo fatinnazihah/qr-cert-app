@@ -1,6 +1,6 @@
 __pycache__/
 *.pyc
-client_secret.json
-token_drive.pkl
+config.toml
 credentials.json
+service_account.json
 token.pickle
