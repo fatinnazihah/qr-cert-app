@@ -31,7 +31,7 @@ def write_file_from_env(var_name, filename, is_binary=True):
 # Reconstruct all required files
 write_file_from_env('CONFIG_TOML', 'config.toml', is_binary=True)
 write_file_from_env('CREDENTIALS_JSON', 'credentials.json', is_binary=True)
-write_file_from_env('SERVICE_ACCOUNT_JSON', 'service_account.json', is_binary=True)
+write_file_from_env('SERVICE_ACCOUNT', 'service_account.json', is_binary=True)
 write_file_from_env('TOKEN_PICKLE', 'token.pickle', is_binary=True)
 
 # === Constants & Init ===
