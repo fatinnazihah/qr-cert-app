@@ -212,7 +212,7 @@ def extract_harness(text, lines):
 def extract_eebd(text, lines):
     cert = re.search(r"\d{1,3}/\d{5}/\d{4}\.SRV", text)
     report = re.search(r"CHSB-ES-\d{2}-\d{2}", text)
-    model_line = next((l for l in lines if "INTERSPIRO" in l or "Spiroscape" in l), None)
+    model_line = next((l for l in lines if "INTERSPIRO" in l or "Spiroscape" in l or "Lalizas" in l or "MSA" in l), None)
     dates = [l for l in lines if re.match(r"^[A-Z][a-z]+ \d{1,2}, \d{4}$", l)]
 
     serial_match = re.search(r"\b\d{5}\b", text)
