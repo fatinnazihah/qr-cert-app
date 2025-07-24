@@ -7,6 +7,7 @@ import qrcode
 import streamlit as st
 import gspread
 import requests
+import base64
 import toml
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
@@ -19,10 +20,23 @@ from googleapiclient.errors import HttpError
 from qrcode.constants import ERROR_CORRECT_H
 from google.oauth2 import service_account
 
-# Load config
-config = toml.load("config.toml")
-drive_folder_id = config["drive"]["folder_id"]
-qr_drive_folder_id = config["drive"]["qr_folder_id"]
+def write_env_file(var_name, filename):
+    content = os.getenv(var_name)
+    if content:
+        with open(filename, 'w') as f:
+            f.write(content)
+
+def write_pickle_from_base64(var_name, filename):
+    b64_content = os.getenv(var_name)
+    if b64_content:
+        with open(filename, 'wb') as f:
+            f.write(base64.b64decode(b64_content))
+            
+# Recreate files from env vars
+write_env_file('CONFIG_TOML', 'config.toml')
+write_env_file('CREDENTIALS_JSON', 'credentials.json')
+write_env_file('SERVICE_ACCOUNT_JSON', 'service_account.json')
+write_env_file('TOKEN_PICKLE', 'token.pickle')
 
 # === Constants & Init ===
 SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets']
@@ -353,9 +367,12 @@ def extract_from_pdf(path):
 
 # === Google Services ===
 def connect_to_sheet(tab_name):
-    creds = st.secrets["google_service_account"]
+    with open("service_account.json", "r") as f:
+        creds_data = f.read()
+    
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    credentials = service_account.Credentials.from_service_account_info(creds, scopes=scopes)
+    credentials = service_account.Credentials.from_service_account_info(eval(creds_data), scopes=scopes)
+
     return gspread.authorize(credentials).open("Certificates").worksheet(tab_name)
 
 def upload_to_drive(path, serial, is_qr=False):
