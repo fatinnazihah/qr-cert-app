@@ -35,6 +35,11 @@ write_file_from_env('CREDENTIALS_JSON', 'credentials.json', is_binary=True)
 write_file_from_env('SERVICE_ACCOUNT', 'service_account.json', is_binary=True)
 write_file_from_env('TOKEN_PICKLE', 'token.pickle', is_binary=True)
 
+# Load config
+config = toml.load("config.toml")
+DRIVE_FOLDER_ID = config["drive"]["folder_id"]
+QR_DRIVE_FOLDER_ID = config["drive"]["qr_folder_id"]
+
 # === Constants & Init ===
 SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets']
 TEMP_DIR = "temp_pdfs"
