@@ -376,7 +376,7 @@ def upload_to_drive(path, serial, is_qr=False):
     creds = get_user_credentials()
     drive = build("drive", "v3", credentials=creds)
 
-    folder = qr_drive_folder_id if is_qr else drive_folder_id
+    folder = QR_DRIVE_FOLDER_ID if is_qr else DRIVE_FOLDER_ID
     name = f"qr_{serial}.png" if is_qr else f"{serial}.pdf"
     
     query = f"name='{name}' and '{folder}' in parents and trashed = false"
