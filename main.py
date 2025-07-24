@@ -9,6 +9,7 @@ import gspread
 import requests
 import base64
 import toml
+import json
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime
@@ -367,7 +368,7 @@ def connect_to_sheet(tab_name):
         creds_data = f.read()
     
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    credentials = service_account.Credentials.from_service_account_info(eval(creds_data), scopes=scopes)
+    credentials = service_account.Credentials.from_service_account_info(json.loads(creds_data), scopes=scopes)
 
     return gspread.authorize(credentials).open("Certificates").worksheet(tab_name)
 
