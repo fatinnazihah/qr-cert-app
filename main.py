@@ -20,23 +20,19 @@ from googleapiclient.errors import HttpError
 from qrcode.constants import ERROR_CORRECT_H
 from google.oauth2 import service_account
 
-def write_env_file(var_name, filename):
-    content = os.getenv(var_name)
-    if content:
-        with open(filename, 'w') as f:
-            f.write(content)
+def write_file_from_env(var_name, filename, is_binary=True):
+    b64 = os.getenv(var_name)
+    if not b64:
+        raise ValueError(f"Missing environment variable: {var_name}")
+    mode = 'wb' if is_binary else 'w'
+    with open(filename, mode) as f:
+        f.write(base64.b64decode(b64) if is_binary else b64)
 
-def write_pickle_from_base64(var_name, filename):
-    b64_content = os.getenv(var_name)
-    if b64_content:
-        with open(filename, 'wb') as f:
-            f.write(base64.b64decode(b64_content))
-            
-# Recreate files from env vars
-write_env_file('CONFIG_TOML', 'config.toml')
-write_env_file('CREDENTIALS_JSON', 'credentials.json')
-write_env_file('SERVICE_ACCOUNT_JSON', 'service_account.json')
-write_env_file('TOKEN_PICKLE', 'token.pickle')
+# Reconstruct all required files
+write_file_from_env('CONFIG_TOML', 'config.toml', is_binary=False)
+write_file_from_env('CREDENTIALS_JSON', 'credentials.json', is_binary=False)
+write_file_from_env('SERVICE_ACCOUNT', 'service_account.json', is_binary=False)
+write_file_from_env('TOKEN_PICKLE', 'token.pickle', is_binary=True)
 
 # === Constants & Init ===
 SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets']
