@@ -211,13 +211,20 @@ def extract_harness(text, lines):
 
 def extract_eebd(text, lines):
     cert = re.search(r"\d{1,3}/\d{5}/\d{4}\.SRV", text)
-    report = re.search(r"CHSB-ES-\d{2}-\d{2}", text)
-    model_line = next((l for l in lines if "INTERSPIRO" in l or "Spiroscape" in l or "Lalizas" in l or "MSA" in l), None)
+    report = re.search(r"CHSB-[A-Z]+-\d{2}-\d{2}", text)
+    model_line = next((l for l in lines if "INTERSPIRO" in l or "Spiroscape" in l or "LALIZAS" in l), None)
     dates = [l for l in lines if re.match(r"^[A-Z][a-z]+ \d{1,2}, \d{4}$", l)]
 
     serial_match = re.search(r"\b\d{5}\b", text)
 
-    print(f"DEBUG - EEBD Cert: {cert.group(0) if cert else 'Not found'}")
+    print("DEBUG - EEBD Extracted:",
+      f"\n  cert  = {cert.group(0) if cert else 'Unknown'}",
+      f"\n  model = {model_line.strip() if model_line else 'Unknown'}",
+      f"\n  serial= {serial_match.group(0) if serial_match else 'Unknown'}",
+      f"\n  cal   = {format_date(dates[0]) if len(dates) > 0 else 'Invalid'}",
+      f"\n  exp   = {format_date(dates[1]) if len(dates) > 1 else 'Invalid'}",
+      f"\n  lot   = {report.group(0) if report else 'Unknown'}")
+
     return [{
         "cert": cert.group(0) if cert else "Unknown",
         "model": model_line.strip() if model_line else "Unknown",
