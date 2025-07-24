@@ -162,7 +162,7 @@ def extract_template_type(text, lines):
         return "absorber"
     if "FULL BODY HARNESS" in text or "PROFESSIONAL HARNESSES" in text:
         return "harness"
-    if any(k in l.lower() for l in lines for k in ["eebd refil", "spiroscape", "interspiro"]):
+    if any(k in l.lower() for l in lines for k in ["eebd refil", "eebd", "spiroscape", "interspiro"]):
         return "eebd"
     if "certificate" in text.lower() and "calibration" in text.lower():
         return "gas_detector"
