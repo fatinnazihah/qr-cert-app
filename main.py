@@ -1,7 +1,6 @@
 # === Imports ===
 import os
 import re
-import pickle
 import fitz  # PyMuPDF
 import qrcode
 import streamlit as st
@@ -13,8 +12,6 @@ import json
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime
-from google.auth.transport.requests import Request
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
@@ -29,11 +26,9 @@ def write_file_from_env(var_name, filename, is_binary=True):
     with open(filename, mode) as f:
         f.write(base64.b64decode(b64) if is_binary else b64)
 
-# Reconstruct all required files
+# Reconstruct required files
 write_file_from_env('CONFIG_TOML', 'config.toml', is_binary=True)
-write_file_from_env('CREDENTIALS_JSON', 'credentials.json', is_binary=True)
 write_file_from_env('SERVICE_ACCOUNT', 'service_account.json', is_binary=True)
-write_file_from_env('TOKEN_PICKLE', 'token.pickle', is_binary=True)
 
 # Load config
 config = toml.load("config.toml")
@@ -46,23 +41,6 @@ TEMP_DIR = "temp_pdfs"
 QR_DIR = "qrcodes"
 os.makedirs(TEMP_DIR, exist_ok=True)
 os.makedirs(QR_DIR, exist_ok=True)
-
-# === Authentication ===
-def get_user_credentials():
-    creds = None
-    if os.path.exists('token.pickle'):
-        with open('token.pickle', 'rb') as token:
-            creds = pickle.load(token)
-
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
-        with open('token.pickle', 'wb') as token:
-            pickle.dump(creds, token)
-    return creds
 
 # === Utility ===
 def format_date(date_str):
@@ -377,16 +355,19 @@ def extract_from_pdf(path):
 # === Google Services ===
 def connect_to_sheet(tab_name):
     with open("service_account.json", "r") as f:
-        creds_data = f.read()
+        creds_data = json.load(f)
     
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    credentials = service_account.Credentials.from_service_account_info(json.loads(creds_data), scopes=scopes)
+    credentials = service_account.Credentials.from_service_account_info(creds_data, scopes=scopes)
 
     return gspread.authorize(credentials).open("Certificates").worksheet(tab_name)
 
 def upload_to_drive(path, serial, is_qr=False):
-    creds = get_user_credentials()
-    drive = build("drive", "v3", credentials=creds)
+    with open("service_account.json", "r") as f:
+        creds_data = json.load(f)
+    
+    credentials = service_account.Credentials.from_service_account_info(creds_data)
+    drive = build("drive", "v3", credentials=credentials)
 
     folder = QR_DRIVE_FOLDER_ID if is_qr else DRIVE_FOLDER_ID
     name = f"qr_{serial}.png" if is_qr else f"{serial}.pdf"
@@ -397,7 +378,7 @@ def upload_to_drive(path, serial, is_qr=False):
         q=query,
         spaces='drive',
         fields='files(id)',
-        supportsAllDrives=False
+        supportsAllDrives=True
     ).execute().get('files', [])
 
     media = MediaFileUpload(path, mimetype="image/png" if is_qr else "application/pdf")
