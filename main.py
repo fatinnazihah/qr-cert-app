@@ -42,6 +42,23 @@ QR_DIR = "qrcodes"
 os.makedirs(TEMP_DIR, exist_ok=True)
 os.makedirs(QR_DIR, exist_ok=True)
 
+# === Authentication ===
+def get_user_credentials():
+    creds = None
+    if os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as token:
+            creds = pickle.load(token)
+
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
+            creds = flow.run_local_server(port=0)
+        with open('token.pickle', 'wb') as token:
+            pickle.dump(creds, token)
+    return creds
+    
 # === Utility ===
 def format_date(date_str):
     try:
@@ -366,13 +383,10 @@ def connect_to_sheet(tab_name):
     return gspread.authorize(credentials).open("Certificates").worksheet(tab_name)
 
 def upload_to_drive(path, serial, is_qr=False):
-    with open("service_account.json", "r") as f:
-        creds_data = json.load(f)
-    
-    credentials = service_account.Credentials.from_service_account_info(creds_data)
-    drive = build("drive", "v3", credentials=credentials)
+    creds = get_user_credentials()
+    drive = build("drive", "v3", credentials=creds)
 
-    folder = QR_DRIVE_FOLDER_ID if is_qr else DRIVE_FOLDER_ID
+    folder = qr_drive_folder_id if is_qr else drive_folder_id
     name = f"qr_{serial}.png" if is_qr else f"{serial}.pdf"
     
     query = f"name='{name}' and '{folder}' in parents and trashed = false"
@@ -381,7 +395,7 @@ def upload_to_drive(path, serial, is_qr=False):
         q=query,
         spaces='drive',
         fields='files(id)',
-        supportsAllDrives=True
+        supportsAllDrives=False
     ).execute().get('files', [])
 
     media = MediaFileUpload(path, mimetype="image/png" if is_qr else "application/pdf")
