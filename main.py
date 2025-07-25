@@ -12,9 +12,11 @@ import qrcode
 import streamlit as st
 import gspread
 import requests
+import pickle
 import toml
 from PIL import Image, ImageDraw, ImageFont
 from qrcode.constants import ERROR_CORRECT_H
+
 
 # Google API related imports
 from googleapiclient.discovery import build
