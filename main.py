@@ -1,17 +1,18 @@
 # === Imports ===
 import os
 import re
+import pickle
 import fitz  # PyMuPDF
 import qrcode
 import streamlit as st
 import gspread
 import requests
-import base64
 import toml
-import json
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime
+from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
