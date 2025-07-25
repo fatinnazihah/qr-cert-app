@@ -291,20 +291,7 @@ def extract_gas_detector(text, lines):
         all_dates.extend(matches)
     
     if len(all_dates) >= 2:
-        model_index = next((i for i, line in enumerate(lines) if "Model" in line), -1)
-        if model_index != -1:
-            for line in lines[model_index:]:
-                date_match = re.search(date_pattern, line)
-                if date_match:
-                    cal_date = date_match.group(0)
-                    break
-            
-            for date in all_dates:
-                if date != cal_date:
-                    exp_date = date
-                    break
-        else:
-            cal_date, exp_date = all_dates[0], all_dates[1]
+        cal_date, exp_date = all_dates[0], all_dates[1]
     elif all_dates:
         cal_date = all_dates[0]
 
