@@ -1,22 +1,25 @@
-# === Imports ===
+# Standard library imports
 import os
 import re
-import pickle
+import base64
+import json
+from io import BytesIO
+from datetime import datetime
+
+# Third-party library imports
 import fitz  # PyMuPDF
 import qrcode
 import streamlit as st
 import gspread
 import requests
 import toml
-from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
-from datetime import datetime
-from google.auth.transport.requests import Request
-from google_auth_oauthlib.flow import InstalledAppFlow
+from qrcode.constants import ERROR_CORRECT_H
+
+# Google API related imports
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
-from qrcode.constants import ERROR_CORRECT_H
 from google.oauth2 import service_account
 
 def write_file_from_env(var_name, filename, is_binary=True):
