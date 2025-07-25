@@ -21,6 +21,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 from google.oauth2 import service_account
+from google_auth_oauthlib.flow import InstalledAppFlow
 
 def write_file_from_env(var_name, filename, is_binary=True):
     b64 = os.getenv(var_name)
