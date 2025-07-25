@@ -246,11 +246,11 @@ def extract_gas_detector(text, lines):
             if i + 1 < len(lines):
                 candidate = lines[i + 1].strip()
     
-                match = re.search(r"[A-Z]{2,}\s?-?\s?\d{5,}", candidate)
+                # Match things like KA422 - 1078627 or KA422-1078627 or KA4221078627
+                match = re.search(r"[A-Z]{2,}\d{2,}\s*-\s*\d{5,}", candidate)
                 if match:
-                    serial = match.group(0).replace(" ", "")
+                    serial = match.group(0).replace(" ", "")  # Optional: remove spaces
             break
-
 
     # Model
     model = "Unknown"
