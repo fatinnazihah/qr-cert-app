@@ -245,9 +245,12 @@ def extract_gas_detector(text, lines):
         if "serial number" in line.lower():
             if i + 1 < len(lines):
                 candidate = lines[i + 1].strip()
-                if re.fullmatch(r"[A-Z0-9\-]{6,}", candidate):
-                    serial = candidate
+    
+                match = re.search(r"[A-Z]{2,}\s?-?\s?\d{5,}", candidate)
+                if match:
+                    serial = match.group(0).replace(" ", "")
             break
+
 
     # Model
     model = "Unknown"
@@ -258,7 +261,7 @@ def extract_gas_detector(text, lines):
                 model = model_candidate
             break
     if model == "Unknown":
-        model_keywords = ["ISC", "Radius", "BZ1", "T40", "PDM+", "SAFEGAS", "MSA"]
+        model_keywords = ["ISC", "Radius", "BZ1", "T40", "PDM+", "SAFEGAS", "MSA","HONEYWELL"]
         model = next((l.strip() for l in lines if any(k.lower() in l.lower() for k in model_keywords)), "Unknown")
 
     # Date Extraction
