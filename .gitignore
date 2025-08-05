@@ -1,6 +1,0 @@
-__pycache__/
-*.pyc
-config.toml
-credentials.json
-service_account.json
-token.pickle
