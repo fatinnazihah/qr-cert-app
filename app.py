@@ -410,6 +410,7 @@ if uploaded:
             extracted, collection_name = extract_from_pdf(temp_path)
             if collection_name == "UNKNOWN" or not extracted:
                 st.error("❌ Unsupported format.")
+                os.remove(temp_path)
                 continue
 
             for data in extracted:
@@ -468,8 +469,17 @@ if uploaded:
 </table>
 """, unsafe_allow_html=True)
 
+                # Delete the temp PDF and QR code after upload
+                try:
+                    os.remove(temp_path)          # Delete PDF
+                    os.remove(qr_path)            # Delete QR code
+                except Exception as e:
+                    st.warning(f"⚠️ Failed to delete temp files: {e}")
+        
         except Exception as e:
             import traceback
             st.error(f"❌ Failed to process {file.name}")
             st.text(str(e))
             st.text(traceback.format_exc())
+
+        
