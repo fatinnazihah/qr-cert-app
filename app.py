@@ -5,7 +5,8 @@ import fitz  # PyMuPDF
 import qrcode
 import streamlit as st
 import requests
-import toml
+import json
+import base64
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime
@@ -14,20 +15,22 @@ import firebase_admin
 from firebase_admin import credentials, firestore, storage
 from google.cloud.exceptions import NotFound
 
-# Load config
-config = toml.load("config.toml")
+# Load config from environment variables
+bucket = os.getenv("FIREBASE_BUCKET")
+
+# Decode and parse base64 Firebase credentials
+firebase_json = os.getenv("FIREBASE_CREDENTIALS")
+firebase_dict = json.loads(base64.b64decode(firebase_json).decode("utf-8"))
 
 # === Firebase Initialization ===
 if not firebase_admin._apps:
-    cred = credentials.Certificate("firebase-service-account.json")
+    cred = credentials.Certificate(firebase_dict)
     firebase_admin.initialize_app(cred, {
-        'storageBucket': 'qrcertificates-30ddb.firebasestorage.app'
+        'storageBucket': bucket
     })
 
 db = firestore.client()
 bucket = storage.bucket()
-
-print(f"Bucket exists: {bucket.exists()}")  # Should return True
 
 # === Constants & Init ===
 TEMP_DIR = "temp_pdfs"
