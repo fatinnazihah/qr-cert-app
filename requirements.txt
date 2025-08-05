@@ -1,11 +1,9 @@
 streamlit
-gspread
-oauth2client
 requests
 PyMuPDF
 qrcode
 pillow
 matplotlib
-google-auth
-google-auth-oauthlib
-google-api-python-client
+firebase-admin
+google-cloud-firestore
+google-cloud-storage
