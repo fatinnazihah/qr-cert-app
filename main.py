@@ -191,7 +191,7 @@ def extract_eebd(text, lines):
     
     # Extract Serial Number (look for a standalone 5-digit number after the address)
     serial_match = None
-    address_index = next((i for i, line in enumerate(lines) if "Miri Sarawak" in line, -1)
+    address_index = next((i for i, line in enumerate(lines) if "Miri Sarawak" in line), -1)
     if address_index != -1 and address_index + 1 < len(lines):
         serial_match = re.search(r"^\d{5}$", lines[address_index + 1].strip())
     
