@@ -1,0 +1,10 @@
+import os
+import json
+import base64
+
+# Read from env
+bucket = os.getenv("FIREBASE_BUCKET")
+
+# Decode and parse base64 Firebase credentials
+firebase_json = os.getenv("FIREBASE_CREDENTIALS")
+firebase_dict = json.loads(base64.b64decode(firebase_json).decode("utf-8"))
