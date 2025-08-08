@@ -450,11 +450,7 @@ if uploaded:
                         # NFC Tag Information Section
                         st.divider()
                         st.subheader("📱 NFC Tag Information")
-                        nfc_text = f"""{qr_link}
-                        Cert:{cert}
-                        SN:{serial}
-                        Cal:{cal}
-                        Exp:{exp}"""
+                        nfc_text = f"""{qr_link} Cert:{cert} SN:{serial} Cal:{cal} Exp:{exp}"""
                         st.code(nfc_text, language="text")
 
                 if update_firestore_record(collection_name, serial, data, pdf_url, qr_url, qr_link):
